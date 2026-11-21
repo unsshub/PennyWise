@@ -1,5 +1,5 @@
+import Constants from 'expo-constants';
 import { Directory, File, Paths } from 'expo-file-system';
-import * as Notifications from 'expo-notifications';
 import { Platform, Share } from 'react-native';
 
 import type { FinanceEngine } from '@/domain/finance-engine';
@@ -7,14 +7,33 @@ import type { UpcomingPayment } from '@/domain/types';
 
 const BILL_CHANNEL_ID = 'pennywise-bill-reminders';
 
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldPlaySound: true,
-    shouldSetBadge: true,
-    shouldShowBanner: true,
-    shouldShowList: true,
-  }),
-});
+function isRunningInExpoGo(): boolean {
+  return (
+    Constants.executionEnvironment === 'storeClient' ||
+    Constants.appOwnership === 'expo'
+  );
+}
+
+let notificationHandlerInitialized = false;
+
+async function getNotificationsModule() {
+  if (Platform.OS === 'web' || isRunningInExpoGo()) {
+    return null;
+  }
+  const Notifications = await import('expo-notifications');
+  if (!notificationHandlerInitialized) {
+    Notifications.setNotificationHandler({
+      handleNotification: async () => ({
+        shouldPlaySound: true,
+        shouldSetBadge: true,
+        shouldShowBanner: true,
+        shouldShowList: true,
+      }),
+    });
+    notificationHandlerInitialized = true;
+  }
+  return Notifications;
+}
 
 export async function syncLiveExchangeRates(engine: FinanceEngine): Promise<boolean> {
   const base = engine.getBaseCurrency().toLowerCase();
@@ -61,6 +80,11 @@ export async function scheduleUpcomingBillNotifications(
   }
 
   try {
+    const Notifications = await getNotificationsModule();
+    if (!Notifications) {
+      return 0;
+    }
+
     if (Platform.OS === 'android') {
       await Notifications.setNotificationChannelAsync(BILL_CHANNEL_ID, {
         name: 'Upcoming Bill Reminders',
