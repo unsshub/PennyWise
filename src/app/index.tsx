@@ -28,6 +28,8 @@ export default function HomeScreen() {
     upcomingPayments,
     homeSections,
     preferences,
+    updatePreferences,
+    togglePrivacyMask,
     theme,
     spendingPaceThisMonth,
     formatAmount,
@@ -44,16 +46,9 @@ export default function HomeScreen() {
     : wallets;
   const archivedCount = allWalletsIncludingArchived.length - wallets.length;
 
-  const togglePrivacyMask = () => {
-    engine.updatePreferences({
-      privacyMaskEnabled: !preferences.privacyMaskEnabled,
-    });
-    refresh();
-  };
-
   const handleCompleteOnboarding = (selectedBase: string) => {
     engine.setBaseCurrency(selectedBase);
-    engine.updatePreferences({ hasCompletedOnboarding: true });
+    updatePreferences({ hasCompletedOnboarding: true });
     refresh();
   };
 
@@ -601,15 +596,28 @@ export default function HomeScreen() {
             <View style={styles.heroActions}>
               <Pressable
                 onPress={togglePrivacyMask}
-                style={[
+                hitSlop={{ top: 14, bottom: 14, left: 14, right: 14 }}
+                style={({ pressed }) => [
                   styles.iconPill,
                   {
-                    backgroundColor: theme.surfaceElevated,
-                    borderColor: theme.border,
+                    backgroundColor: pressed
+                      ? theme.accent + '33'
+                      : theme.surfaceElevated,
+                    borderColor: preferences.privacyMaskEnabled
+                      ? theme.accent
+                      : theme.border,
                   },
                 ]}
               >
-                <Text style={{ fontSize: 14 }}>
+                <Text
+                  style={{
+                    fontSize: 13,
+                    fontWeight: '800',
+                    color: preferences.privacyMaskEnabled
+                      ? theme.accent
+                      : theme.textPrimary,
+                  }}
+                >
                   {preferences.privacyMaskEnabled ? '🙈 Hidden' : '👁️ Visible'}
                 </Text>
               </Pressable>

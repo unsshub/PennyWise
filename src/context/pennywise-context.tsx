@@ -67,6 +67,8 @@ interface PennyWiseContextValue {
   exchangeRates: ExchangeRate[];
   homeSections: HomeSection[];
   preferences: UserPreferences;
+  updatePreferences: (updates: Partial<UserPreferences>) => void;
+  togglePrivacyMask: () => void;
   theme: ThemePalette;
   spendingPaceThisMonth: SpendingPaceComparison;
   formatAmount: (
@@ -86,10 +88,61 @@ interface PennyWiseContextValue {
 
 const PennyWiseContext = createContext<PennyWiseContextValue | null>(null);
 
+interface SnapshotState {
+  revision: number;
+  baseCurrency: string;
+  wallets: Wallet[];
+  allWalletsIncludingArchived: Wallet[];
+  netWorthMinor: string;
+  categories: Category[];
+  transactions: Transaction[];
+  budgets: Budget[];
+  budgetEvaluations: BudgetEvaluation[];
+  recurringRules: RecurringRule[];
+  upcomingPayments: UpcomingPayment[];
+  exchangeRates: ExchangeRate[];
+  homeSections: HomeSection[];
+  preferences: UserPreferences;
+  spendingPaceThisMonth: SpendingPaceComparison;
+}
+
+function readEngineState(engine: FinanceEngine, revision: number): SnapshotState {
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const [y, m] = todayStr.split('-').map(Number);
+  const currentStart = `${y}-${String(m).padStart(2, '0')}-01`;
+  const lastDay = new Date(Date.UTC(y, m, 0)).getUTCDate();
+  const currentEnd = `${y}-${String(m).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+
+  const budgets = engine.listBudgets();
+  return {
+    revision,
+    baseCurrency: engine.getBaseCurrency(),
+    wallets: engine.listWallets(),
+    allWalletsIncludingArchived: engine.listWallets({ includeArchived: true }),
+    netWorthMinor: engine.calculateNetWorthMinor(),
+    categories: engine.listCategories(),
+    transactions: engine.listTransactions(),
+    budgets,
+    budgetEvaluations: budgets.map((b) => engine.evaluateBudget(b.id, todayStr)),
+    recurringRules: engine.listRecurringRules(),
+    upcomingPayments: engine.listUpcomingPayments(),
+    exchangeRates: engine.listExchangeRates(),
+    homeSections: engine.getHomeSections(),
+    preferences: engine.getPreferences(),
+    spendingPaceThisMonth: engine.computeSpendingPaceComparison({
+      currentStart,
+      currentEnd,
+      referenceToday: todayStr,
+    }),
+  };
+}
+
 export function PennyWiseProvider({ children }: { children: React.ReactNode }) {
   const engine = useMemo(() => getDeviceFinanceEngine(), []);
   const systemScheme = useColorScheme();
-  const [revision, setRevision] = useState(0);
+  const [snapshot, setSnapshot] = useState<SnapshotState>(() =>
+    readEngineState(engine, 0)
+  );
   const [isQuickEntryOpen, setIsQuickEntryOpen] = useState(false);
   const [quickEntryDraft, setQuickEntryDraft] = useState<QuickEntryDraft | null>(null);
   const [isAppLocked, setIsAppLocked] = useState(() => {
@@ -97,17 +150,44 @@ export function PennyWiseProvider({ children }: { children: React.ReactNode }) {
   });
 
   const refresh = useCallback(() => {
-    setRevision((r) => r + 1);
-  }, []);
+    setSnapshot((prev) => readEngineState(engine, prev.revision + 1));
+  }, [engine]);
+
+  const updatePreferences = useCallback(
+    (updates: Partial<UserPreferences>) => {
+      const updatedPrefs = engine.updatePreferences(updates);
+      // Immediately update React state synchronously so UI toggles (like Privacy Mask / Theme) respond on the first tap
+      setSnapshot((prev) => ({
+        ...prev,
+        revision: prev.revision + 1,
+        preferences: updatedPrefs,
+      }));
+    },
+    [engine]
+  );
+
+  const togglePrivacyMask = useCallback(() => {
+    setSnapshot((prev) => {
+      const nextMasked = !prev.preferences.privacyMaskEnabled;
+      const updatedPrefs = engine.updatePreferences({
+        privacyMaskEnabled: nextMasked,
+      });
+      return {
+        ...prev,
+        revision: prev.revision + 1,
+        preferences: updatedPrefs,
+      };
+    });
+  }, [engine]);
 
   useEffect(() => {
     const today = new Date().toISOString().slice(0, 10);
     const settled = engine.processDueAutoPayRules(today);
     if (settled.length > 0) {
-      setRevision((r) => r + 1);
+      refresh();
     }
     void scheduleUpcomingBillNotifications(engine.listUpcomingPayments());
-  }, [engine]);
+  }, [engine, refresh]);
 
   // Re-lock on background resume when Biometric App Lock is enabled
   useEffect(() => {
@@ -121,40 +201,23 @@ export function PennyWiseProvider({ children }: { children: React.ReactNode }) {
     return () => sub.remove();
   }, [engine]);
 
-  const baseCurrency = useMemo(() => engine.getBaseCurrency(), [engine, revision]);
-  const wallets = useMemo(() => engine.listWallets(), [engine, revision]);
-  const allWalletsIncludingArchived = useMemo(
-    () => engine.listWallets({ includeArchived: true }),
-    [engine, revision]
-  );
-  const netWorthMinor = useMemo(() => engine.calculateNetWorthMinor(), [engine, revision]);
-  const categories = useMemo(() => engine.listCategories(), [engine, revision]);
-  const transactions = useMemo(() => engine.listTransactions(), [engine, revision]);
-  const budgets = useMemo(() => engine.listBudgets(), [engine, revision]);
-  const todayStr = useMemo(() => new Date().toISOString().slice(0, 10), []);
-
-  const budgetEvaluations = useMemo(
-    () => budgets.map((b) => engine.evaluateBudget(b.id, todayStr)),
-    [engine, budgets, todayStr, revision]
-  );
-
-  const recurringRules = useMemo(() => engine.listRecurringRules(), [engine, revision]);
-  const upcomingPayments = useMemo(() => engine.listUpcomingPayments(), [engine, revision]);
-  const exchangeRates = useMemo(() => engine.listExchangeRates(), [engine, revision]);
-  const homeSections = useMemo(() => engine.getHomeSections(), [engine, revision]);
-  const preferences = useMemo(() => engine.getPreferences(), [engine, revision]);
-
-  const spendingPaceThisMonth = useMemo(() => {
-    const [y, m] = todayStr.split('-').map(Number);
-    const currentStart = `${y}-${String(m).padStart(2, '0')}-01`;
-    const lastDay = new Date(Date.UTC(y, m, 0)).getUTCDate();
-    const currentEnd = `${y}-${String(m).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
-    return engine.computeSpendingPaceComparison({
-      currentStart,
-      currentEnd,
-      referenceToday: todayStr,
-    });
-  }, [engine, todayStr, revision]);
+  const {
+    revision,
+    baseCurrency,
+    wallets,
+    allWalletsIncludingArchived,
+    netWorthMinor,
+    categories,
+    transactions,
+    budgets,
+    budgetEvaluations,
+    recurringRules,
+    upcomingPayments,
+    exchangeRates,
+    homeSections,
+    preferences,
+    spendingPaceThisMonth,
+  } = snapshot;
 
   const theme = useMemo<ThemePalette>(() => {
     const mode = preferences.themeMode;
@@ -240,6 +303,8 @@ export function PennyWiseProvider({ children }: { children: React.ReactNode }) {
       exchangeRates,
       homeSections,
       preferences,
+      updatePreferences,
+      togglePrivacyMask,
       theme,
       spendingPaceThisMonth,
       formatAmount,
@@ -268,6 +333,8 @@ export function PennyWiseProvider({ children }: { children: React.ReactNode }) {
       exchangeRates,
       homeSections,
       preferences,
+      updatePreferences,
+      togglePrivacyMask,
       theme,
       spendingPaceThisMonth,
       formatAmount,

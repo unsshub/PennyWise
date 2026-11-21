@@ -49,6 +49,7 @@ export default function BillsAndSettingsScreen() {
     exchangeRates,
     homeSections,
     preferences,
+    updatePreferences,
     theme,
     formatAmount,
     refresh,
@@ -571,8 +572,7 @@ export default function BillsAndSettingsScreen() {
                 <Pressable
                   key={tm}
                   onPress={() => {
-                    engine.updatePreferences({ themeMode: tm });
-                    refresh();
+                    updatePreferences({ themeMode: tm });
                   }}
                   style={[
                     styles.segmentBtn,
@@ -611,8 +611,7 @@ export default function BillsAndSettingsScreen() {
                 <Pressable
                   key={pal.hex}
                   onPress={() => {
-                    engine.updatePreferences({ accentColor: pal.hex });
-                    refresh();
+                    updatePreferences({ accentColor: pal.hex });
                   }}
                   style={[
                     styles.colorSwatch,
@@ -893,8 +892,7 @@ export default function BillsAndSettingsScreen() {
             <Switch
               value={preferences.biometricLockEnabled}
               onValueChange={(val) => {
-                engine.updatePreferences({ biometricLockEnabled: val });
-                refresh();
+                updatePreferences({ biometricLockEnabled: val });
               }}
               trackColor={{ false: theme.border, true: theme.accent }}
             />
@@ -918,8 +916,7 @@ export default function BillsAndSettingsScreen() {
             <Switch
               value={preferences.privacyMaskEnabled}
               onValueChange={(val) => {
-                engine.updatePreferences({ privacyMaskEnabled: val });
-                refresh();
+                updatePreferences({ privacyMaskEnabled: val });
               }}
               trackColor={{ false: theme.border, true: theme.accent }}
             />
