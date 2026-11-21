@@ -1,0 +1,15 @@
+{
+  "compilerOptions": {
+    "target": "es2022",
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "esModuleInterop": true,
+    "strict": false,
+    "skipLibCheck": true,
+    "outDir": ".tmp-tests",
+    "rootDir": "src"
+  },
+  "include": [
+    "src/domain/**/*.ts"
+  ]
+}
