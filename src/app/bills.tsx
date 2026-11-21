@@ -1,4 +1,3 @@
-import { File } from 'expo-file-system';
 import React, { useMemo, useState } from 'react';
 import {
   Modal,
@@ -29,8 +28,6 @@ import {
   scheduleUpcomingBillNotifications,
   shareExportedContent,
 } from '@/services/device-services';
-
-declare const require: (name: string) => any;
 
 const ACCENT_PALETTES = [
   { name: 'Emerald', hex: '#10B981' },
@@ -289,25 +286,8 @@ export default function BillsAndSettingsScreen() {
       return;
     }
 
-    try {
-      const DocumentPicker = require('expo-document-picker');
-      const result = await DocumentPicker.getDocumentAsync({
-        type: 'application/json',
-        copyToCacheDirectory: true,
-      });
-      if (result.canceled || !result.assets?.[0]?.uri) {
-        return;
-      }
-      const pickedFile = new File(result.assets[0].uri);
-      const rawJson = await pickedFile.text();
-      engine.restoreBackupSnapshotJson(rawJson);
-      refresh();
-      setStatusBanner('Backup Snapshot restored from file!');
-    } catch {
-      // Fallback to inspect/paste modal if native document picker module is not installed
-      setBackupJsonText(engine.exportBackupSnapshotJson());
-      setBackupModalOpen(true);
-    }
+    setBackupJsonText(engine.exportBackupSnapshotJson());
+    setBackupModalOpen(true);
   };
 
   const handleRestoreFromModal = () => {

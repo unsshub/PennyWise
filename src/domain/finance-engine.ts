@@ -2601,28 +2601,3 @@ export class FinanceEngine {
     }
   }
 }
-
-declare const require: (moduleName: string) => any;
-
-export function createInMemorySQLiteDriver(): SQLiteDriver {
-  const nodeSqlite = require('node:sqlite');
-  const db = new nodeSqlite.DatabaseSync(':memory:');
-  return {
-    exec(sql: string): void {
-      db.exec(sql);
-    },
-    run(sql: string, params: unknown[] = []): void {
-      db.prepare(sql).run(...params);
-    },
-    get<T = Record<string, unknown>>(sql: string, params: unknown[] = []): T | undefined {
-      return db.prepare(sql).get(...params) as T | undefined;
-    },
-    all<T = Record<string, unknown>>(sql: string, params: unknown[] = []): T[] {
-      return db.prepare(sql).all(...params) as T[];
-    },
-  };
-}
-
-export function createInMemoryFinanceEngine(): FinanceEngine {
-  return new FinanceEngine(createInMemorySQLiteDriver());
-}

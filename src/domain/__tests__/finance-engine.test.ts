@@ -1,8 +1,27 @@
 // @ts-nocheck
 import assert from 'node:assert/strict';
+import sqlite from 'node:sqlite';
 import test from 'node:test';
 
-import { createInMemoryFinanceEngine } from '../finance-engine';
+import { FinanceEngine } from '../finance-engine';
+
+function createInMemoryFinanceEngine() {
+  const db = new sqlite.DatabaseSync(':memory:');
+  return new FinanceEngine({
+    exec(sql) {
+      db.exec(sql);
+    },
+    run(sql, params = []) {
+      db.prepare(sql).run(...params);
+    },
+    get(sql, params = []) {
+      return db.prepare(sql).get(...params);
+    },
+    all(sql, params = []) {
+      return db.prepare(sql).all(...params);
+    },
+  });
+}
 
 test('Slice 01 — initializes default Base Currency (USD), default Cash Wallet, and computes Net Worth across multi-currency Wallets (USD, EUR, BTC)', () => {
   const engine = createInMemoryFinanceEngine();

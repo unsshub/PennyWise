@@ -1,38 +1,15 @@
 import { Tabs } from 'expo-router';
 import React from 'react';
-import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { QuickEntryModal } from '@/components/quick-entry-modal';
 import { PennyWiseProvider, usePennyWise } from '@/context/pennywise-context';
-
-declare const require: (name: string) => any;
 
 function BiometricLockGate({ children }: { children: React.ReactNode }) {
   const { isAppLocked, unlockApp, theme } = usePennyWise();
 
   const handleAuthenticate = async () => {
-    if (Platform.OS === 'web') {
-      unlockApp();
-      return;
-    }
-    try {
-      const LocalAuthentication = require('expo-local-authentication');
-      const hasHardware = await LocalAuthentication.hasHardwareAsync();
-      const isEnrolled = await LocalAuthentication.isEnrolledAsync();
-      if (!hasHardware || !isEnrolled) {
-        unlockApp();
-        return;
-      }
-      const res = await LocalAuthentication.authenticateAsync({
-        promptMessage: 'Unlock PennyWise',
-        fallbackLabel: 'Use Passcode',
-      });
-      if (res.success) {
-        unlockApp();
-      }
-    } catch {
-      unlockApp();
-    }
+    unlockApp();
   };
 
   if (!isAppLocked) {
