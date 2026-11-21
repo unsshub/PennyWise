@@ -1,6 +1,7 @@
 import { Tabs } from 'expo-router';
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { QuickEntryModal } from '@/components/quick-entry-modal';
 import { PennyWiseProvider, usePennyWise } from '@/context/pennywise-context';
@@ -37,19 +38,27 @@ function BiometricLockGate({ children }: { children: React.ReactNode }) {
 
 function AppNavigationShell() {
   const { theme, openQuickEntry } = usePennyWise();
+  const insets = useSafeAreaInsets();
+  const bottomInset = Math.max(insets.bottom, 16);
+  const topInset = Math.max(insets.top, 12);
 
   return (
     <BiometricLockGate>
-      <View style={[styles.root, { backgroundColor: theme.background }]}>
+      <View
+        style={[
+          styles.root,
+          { backgroundColor: theme.background, paddingTop: topInset },
+        ]}
+      >
         <Tabs
           screenOptions={{
             headerShown: false,
             tabBarStyle: {
               backgroundColor: theme.surface,
               borderTopColor: theme.border,
-              height: 64,
-              paddingBottom: 8,
-              paddingTop: 6,
+              height: 60 + bottomInset,
+              paddingBottom: bottomInset + 6,
+              paddingTop: 8,
             },
             tabBarActiveTintColor: theme.accent,
             tabBarInactiveTintColor: theme.textMuted,
@@ -115,6 +124,7 @@ function AppNavigationShell() {
             {
               backgroundColor: theme.accent,
               shadowColor: theme.accent,
+              bottom: 74 + bottomInset,
             },
           ]}
         >

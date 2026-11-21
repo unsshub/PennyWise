@@ -8,6 +8,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { usePennyWise } from '@/context/pennywise-context';
 import { evaluateCalculatorExpression } from '@/domain/calculator';
@@ -36,6 +37,8 @@ export function QuickEntryModal() {
   } = usePennyWise();
 
   const editingTx = quickEntryDraft?.editingTransaction ?? null;
+  const insets = useSafeAreaInsets();
+  const bottomSafePad = Math.max(insets.bottom, 16) + 14;
 
   const [txType, setTxType] = useState<TransactionType>('EXPENSE');
   const [expression, setExpression] = useState('');
@@ -314,7 +317,11 @@ export function QuickEntryModal() {
         <View
           style={[
             styles.sheet,
-            { backgroundColor: theme.surface, borderColor: theme.border },
+            {
+              backgroundColor: theme.surface,
+              borderColor: theme.border,
+              paddingBottom: bottomSafePad,
+            },
           ]}
         >
           {/* Header & Type Switcher */}
