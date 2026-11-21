@@ -1,0 +1,404 @@
+import React, { useEffect, useState } from 'react';
+import {
+  Modal,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Switch,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
+
+import { usePennyWise } from '@/context/pennywise-context';
+import { SUPPORTED_CURRENCIES, parseMajorToMinorUnits } from '@/domain/currency';
+import type { Wallet } from '@/domain/types';
+
+const WALLET_COLORS = [
+  '#10B981',
+  '#3B82F6',
+  '#F59E0B',
+  '#8B5CF6',
+  '#EC4899',
+  '#06B6D4',
+  '#EF4444',
+  '#14B8A6',
+];
+
+const WALLET_ICONS = ['💵', '€', '₿', '🏦', '💳', '🪙', '💼', '🐖'];
+
+export function WalletModal({
+  visible,
+  editingWallet,
+  onClose,
+}: {
+  visible: boolean;
+  editingWallet: Wallet | null;
+  onClose: () => void;
+}) {
+  const { engine, theme, refresh } = usePennyWise();
+
+  const [name, setName] = useState('');
+  const [currencyCode, setCurrencyCode] = useState('USD');
+  const [balanceMajor, setBalanceMajor] = useState('0');
+  const [color, setColor] = useState('#10B981');
+  const [icon, setIcon] = useState('💵');
+  const [includeInNetWorth, setIncludeInNetWorth] = useState(true);
+
+  useEffect(() => {
+    if (!visible) {
+      return;
+    }
+    if (editingWallet) {
+      setName(editingWallet.name);
+      setCurrencyCode(editingWallet.currencyCode);
+      const major = (
+        Number(editingWallet.currentBalanceMinor) /
+        Math.pow(10, editingWallet.decimalPlaces)
+      ).toString();
+      setBalanceMajor(major);
+      setColor(editingWallet.color);
+      setIcon(editingWallet.icon);
+      setIncludeInNetWorth(editingWallet.includeInNetWorth);
+    } else {
+      setName('');
+      setCurrencyCode('USD');
+      setBalanceMajor('0');
+      setColor('#3B82F6');
+      setIcon('🏦');
+      setIncludeInNetWorth(true);
+    }
+  }, [visible, editingWallet]);
+
+  const handleSave = () => {
+    const currDef =
+      SUPPORTED_CURRENCIES.find((c) => c.code === currencyCode) ??
+      SUPPORTED_CURRENCIES[0];
+    const targetMinor = parseMajorToMinorUnits(
+      balanceMajor,
+      currDef.decimalPlaces
+    );
+
+    if (editingWallet) {
+      engine.updateWallet(editingWallet.id, {
+        name: name.trim() || currDef.name,
+        currencyCode: currDef.code,
+        decimalPlaces: currDef.decimalPlaces,
+        color,
+        icon,
+        includeInNetWorth,
+      });
+      if (targetMinor !== editingWallet.currentBalanceMinor) {
+        engine.reconcileWalletBalance(
+          editingWallet.id,
+          targetMinor,
+          'Manual wallet balance reconciliation'
+        );
+      }
+    } else {
+      engine.createWallet({
+        name: name.trim() || currDef.name,
+        currencyCode: currDef.code,
+        decimalPlaces: currDef.decimalPlaces,
+        initialBalanceMinor: targetMinor,
+        color,
+        icon,
+        includeInNetWorth,
+      });
+    }
+
+    refresh();
+    onClose();
+  };
+
+  const handleDelete = () => {
+    if (!editingWallet) {
+      return;
+    }
+    engine.deleteWallet(editingWallet.id);
+    refresh();
+    onClose();
+  };
+
+  return (
+    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
+      <View style={styles.overlay}>
+        <View
+          style={[
+            styles.card,
+            { backgroundColor: theme.surface, borderColor: theme.border },
+          ]}
+        >
+          <View style={styles.headerRow}>
+            <Text style={[styles.titleText, { color: theme.textPrimary }]}>
+              {editingWallet ? `Edit Wallet (${editingWallet.name})` : 'New Multi-Currency Wallet'}
+            </Text>
+            <Pressable onPress={onClose}>
+              <Text style={[styles.closeText, { color: theme.textSecondary }]}>✕</Text>
+            </Pressable>
+          </View>
+
+          <ScrollView showsVerticalScrollIndicator={false}>
+            <Text style={[styles.label, { color: theme.textSecondary }]}>
+              Wallet Name
+            </Text>
+            <TextInput
+              value={name}
+              onChangeText={setName}
+              placeholder="e.g. Wallet, Euros, Bitcoin"
+              placeholderTextColor={theme.textMuted}
+              style={[
+                styles.input,
+                {
+                  backgroundColor: theme.surfaceElevated,
+                  color: theme.textPrimary,
+                  borderColor: theme.border,
+                },
+              ]}
+            />
+
+            <Text style={[styles.label, { color: theme.textSecondary }]}>
+              Currency (Fiat & Crypto)
+            </Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.row}>
+              {SUPPORTED_CURRENCIES.map((c) => {
+                const selected = c.code === currencyCode;
+                return (
+                  <Pressable
+                    key={c.code}
+                    onPress={() => {
+                      setCurrencyCode(c.code);
+                      if (!editingWallet) {
+                        setIcon(c.symbol.length <= 2 ? c.symbol : '🏦');
+                      }
+                    }}
+                    style={[
+                      styles.chip,
+                      {
+                        backgroundColor: selected ? theme.accent : theme.surfaceElevated,
+                        borderColor: selected ? theme.accent : theme.border,
+                      },
+                    ]}
+                  >
+                    <Text
+                      style={{
+                        color: selected ? '#FFFFFF' : theme.textPrimary,
+                        fontWeight: '700',
+                        fontSize: 13,
+                      }}
+                    >
+                      {c.symbol} {c.code} ({c.decimalPlaces}d)
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+
+            <Text style={[styles.label, { color: theme.textSecondary }]}>
+              {editingWallet
+                ? 'Current Balance (Reconciles via Balance Adjustment)'
+                : 'Starting Balance'}
+            </Text>
+            <TextInput
+              value={balanceMajor}
+              onChangeText={setBalanceMajor}
+              keyboardType="decimal-pad"
+              placeholder="0.00"
+              placeholderTextColor={theme.textMuted}
+              style={[
+                styles.input,
+                {
+                  backgroundColor: theme.surfaceElevated,
+                  color: theme.textPrimary,
+                  borderColor: theme.border,
+                },
+              ]}
+            />
+
+            <Text style={[styles.label, { color: theme.textSecondary }]}>
+              Icon & Color
+            </Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.row}>
+              {WALLET_ICONS.map((ic) => (
+                <Pressable
+                  key={ic}
+                  onPress={() => setIcon(ic)}
+                  style={[
+                    styles.iconChip,
+                    {
+                      backgroundColor:
+                        icon === ic ? theme.accent + '33' : theme.surfaceElevated,
+                      borderColor: icon === ic ? theme.accent : theme.border,
+                    },
+                  ]}
+                >
+                  <Text style={{ fontSize: 18 }}>{ic}</Text>
+                </Pressable>
+              ))}
+            </ScrollView>
+
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.row}>
+              {WALLET_COLORS.map((col) => (
+                <Pressable
+                  key={col}
+                  onPress={() => setColor(col)}
+                  style={[
+                    styles.colorCircle,
+                    {
+                      backgroundColor: col,
+                      borderWidth: color === col ? 3 : 0,
+                      borderColor: '#FFFFFF',
+                    },
+                  ]}
+                />
+              ))}
+            </ScrollView>
+
+            <View style={styles.switchRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.switchTitle, { color: theme.textPrimary }]}>
+                  Include in Net Worth
+                </Text>
+                <Text style={[styles.switchSub, { color: theme.textSecondary }]}>
+                  Count this Wallet toward your total converted Net Worth
+                </Text>
+              </View>
+              <Switch
+                value={includeInNetWorth}
+                onValueChange={setIncludeInNetWorth}
+                trackColor={{ false: theme.border, true: theme.accent }}
+              />
+            </View>
+          </ScrollView>
+
+          <View style={styles.footerRow}>
+            {editingWallet && editingWallet.id !== 'wallet-default-cash' && (
+              <Pressable
+                onPress={handleDelete}
+                style={[styles.deleteBtn, { backgroundColor: theme.danger + '22' }]}
+              >
+                <Text style={{ color: theme.danger, fontWeight: '700' }}>Delete</Text>
+              </Pressable>
+            )}
+            <Pressable
+              onPress={handleSave}
+              style={[styles.saveBtn, { backgroundColor: theme.accent }]}
+            >
+              <Text style={styles.saveText}>
+                {editingWallet ? 'Save Wallet' : 'Create Wallet'}
+              </Text>
+            </Pressable>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+const styles = StyleSheet.create({
+  overlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.65)',
+    justifyContent: 'center',
+    padding: 16,
+  },
+  card: {
+    borderRadius: 22,
+    borderWidth: 1,
+    padding: 18,
+    maxHeight: '88%',
+  },
+  headerRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  titleText: {
+    fontSize: 18,
+    fontWeight: '800',
+  },
+  closeText: {
+    fontSize: 18,
+    fontWeight: '700',
+    padding: 4,
+  },
+  label: {
+    fontSize: 12,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    marginTop: 10,
+    marginBottom: 6,
+  },
+  input: {
+    borderRadius: 12,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 15,
+  },
+  row: {
+    flexDirection: 'row',
+    marginVertical: 4,
+  },
+  chip: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 16,
+    borderWidth: 1,
+    marginRight: 8,
+  },
+  iconChip: {
+    width: 42,
+    height: 42,
+    borderRadius: 12,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 8,
+  },
+  colorCircle: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    marginRight: 10,
+  },
+  switchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 14,
+    marginBottom: 8,
+  },
+  switchTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  switchSub: {
+    fontSize: 12,
+    marginTop: 2,
+  },
+  footerRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 14,
+  },
+  deleteBtn: {
+    paddingHorizontal: 16,
+    paddingVertical: 13,
+    borderRadius: 12,
+    justifyContent: 'center',
+  },
+  saveBtn: {
+    flex: 1,
+    paddingVertical: 13,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  saveText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '800',
+  },
+});

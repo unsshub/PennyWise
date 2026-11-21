@@ -4,12 +4,12 @@
 
 **Blocked by:** None — can start immediately
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] App boots into a bottom-tab navigation shell with an initialized on-device SQLite database and default seed data (`Base Currency` defaulted to `USD`, default `Exchange Rate` cache, and an initial Cash `Wallet`).
-- [ ] All monetary storage and calculations use exact integer minor units (`BigInt` / integer string paired with `decimalPlaces`) with zero IEEE-754 floating-point rounding drift across 2-decimal fiat and 8-decimal crypto currencies.
-- [ ] User can view and change their `Base Currency` at any time, automatically recalculating `Net Worth` and converted `Wallet` display balances.
-- [ ] User can create, edit, reorder, archive, and delete multiple `Wallet`s (e.g., "Cash Wallet" in `USD`, "Euros" in `EUR`, "Bitcoin" in `BTC`), customizing each `Wallet`'s name, currency code, starting balance, icon, color, and `includeInNetWorth` toggle.
-- [ ] App fetches public `Exchange Rate`s when online, caches them in SQLite for offline operation, and allows the user to manually override any currency's `Exchange Rate` to the `Base Currency`.
-- [ ] Home screen displays the total `Net Worth` in the `Base Currency` (summing only non-archived `Wallet`s with `includeInNetWorth: true` converted at the latest cached `Exchange Rate`) alongside an interactive Wallets Carousel showing each `Wallet`'s native balance and converted `Base Currency` value.
-- [ ] Automated behavioral tests at the `Ledger & Finance Engine` in-memory SQLite seam verify multi-currency `Wallet` CRUD, 2-decimal and 8-decimal precision, `Exchange Rate` caching/overrides, `includeInNetWorth` filtering, and `Net Worth` calculation.
+- [x] App boots into a bottom-tab navigation shell with an initialized on-device SQLite database and default seed data (`Base Currency` defaulted to `USD`, default `Exchange Rate` cache, and an initial Cash `Wallet`).
+- [x] All monetary storage and calculations use exact integer minor units (`BigInt` / integer string paired with `decimalPlaces`) with zero IEEE-754 floating-point rounding drift across 2-decimal fiat and 8-decimal crypto currencies.
+- [x] User can view and change their `Base Currency` at any time, automatically recalculating `Net Worth` and converted `Wallet` display balances.
+- [x] User can create, edit, reorder, archive, and delete multiple `Wallet`s (e.g., "Cash Wallet" in `USD`, "Euros" in `EUR`, "Bitcoin" in `BTC`), customizing each `Wallet`'s name, currency code, starting balance, icon, color, and `includeInNetWorth` toggle.
+- [x] App fetches public `Exchange Rate`s when online, caches them in SQLite for offline operation, and allows the user to manually override any currency's `Exchange Rate` to the `Base Currency`.
+- [x] Home screen displays the total `Net Worth` in the `Base Currency` (summing only non-archived `Wallet`s with `includeInNetWorth: true` converted at the latest cached `Exchange Rate`) alongside an interactive Wallets Carousel showing each `Wallet`'s native balance and converted `Base Currency` value.
+- [x] Automated behavioral tests at the `Ledger & Finance Engine` in-memory SQLite seam verify multi-currency `Wallet` CRUD, 2-decimal and 8-decimal precision, `Exchange Rate` caching/overrides, `includeInNetWorth` filtering, and `Net Worth` calculation.

@@ -4,12 +4,12 @@
 
 **Blocked by:** 02 — Categories, Subcategories & Calculator Quick-Entry for Expenses and Income
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Insights tab provides universal filters at the top for time window (`Week`, `Month`, `Year`, `Custom Period`) and `Wallet` scope (`All Wallets` or specific `Wallet`s), converting multi-currency `Transaction`s to the `Base Currency` via their `Snapshot Rate`.
-- [ ] **`Spending Pace Comparison` Line Chart**: Plots cumulative daily `Expense`s for the current period (solid line up to today) overlaid against the previous equivalent period's cumulative `Expense`s (dashed/muted line) with interactive touch-scrubbing tooltips showing the exact day-by-day difference.
-- [ ] **Category Breakdown Donut/Pie Chart**: Displays percentage and monetary breakdown of `Expense`s (or `Income`) by top-level `Category`; tapping a slice drills down into its child `Subcategory` breakdown and filters the matching `Transaction` list below.
-- [ ] **Cash Flow Bar Graph**: Compares total `Income` vs. total `Expense` and net savings across consecutive weeks, months, or years.
-- [ ] **Net Worth & Wallet Balance History Line Chart**: Plots historical `Net Worth` (or selected `Wallet` balance) trajectory over `1M`, `3M`, `6M`, `1Y`, and `All` time horizons.
-- [ ] Insights summary cards display `Average Daily Spend`, `Top Expense Category`, `Net Cash Flow`, and `% Change vs. Previous Period`.
-- [ ] Automated behavioral tests at the `Ledger & Finance Engine` seam verify cumulative daily `Spending Pace Comparison` series generation, Category-to-Subcategory drill-down aggregation, multi-period Cash Flow bar series, and historical balance curve reconstruction.
+- [x] Insights tab provides universal filters at the top for time window (`Week`, `Month`, `Year`, `Custom Period`) and `Wallet` scope (`All Wallets` or specific `Wallet`s), converting multi-currency `Transaction`s to the `Base Currency` via their `Snapshot Rate`.
+- [x] **`Spending Pace Comparison` Line Chart**: Plots cumulative daily `Expense`s for the current period (solid line up to today) overlaid against the previous equivalent period's cumulative `Expense`s (dashed/muted line) with interactive touch-scrubbing tooltips showing the exact day-by-day difference.
+- [x] **Category Breakdown Donut/Pie Chart**: Displays percentage and monetary breakdown of `Expense`s (or `Income`) by top-level `Category`; tapping a slice drills down into its child `Subcategory` breakdown and filters the matching `Transaction` list below.
+- [x] **Cash Flow Bar Graph**: Compares total `Income` vs. total `Expense` and net savings across consecutive weeks, months, or years.
+- [x] **Net Worth & Wallet Balance History Line Chart**: Plots historical `Net Worth` (or selected `Wallet` balance) trajectory over `1M`, `3M`, `6M`, `1Y`, and `All` time horizons.
+- [x] Insights summary cards display `Average Daily Spend`, `Top Expense Category`, `Net Cash Flow`, and `% Change vs. Previous Period`.
+- [x] Automated behavioral tests at the `Ledger & Finance Engine` seam verify cumulative daily `Spending Pace Comparison` series generation, Category-to-Subcategory drill-down aggregation, multi-period Cash Flow bar series, and historical balance curve reconstruction.
