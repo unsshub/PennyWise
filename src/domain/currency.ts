@@ -52,7 +52,6 @@ export function convertMinorUnits(
     return rawBig.toString();
   }
 
-  // Scale rateToTarget by 10^12 into BigInt to avoid floating-point drift on large balances
   const RATE_SCALE = 1_000_000_000_000n;
   const scaledRate = BigInt(Math.round(rateToTarget * 1_000_000_000_000));
   const fromFactor = 10n ** BigInt(fromDecimals);
@@ -61,7 +60,6 @@ export function convertMinorUnits(
   const numerator = rawBig * scaledRate * toFactor;
   const denominator = fromFactor * RATE_SCALE;
 
-  // Symmetric half-up rounding in BigInt
   const isNegative = numerator < 0n;
   const absNum = isNegative ? -numerator : numerator;
   const roundedAbs = (absNum + denominator / 2n) / denominator;
@@ -93,7 +91,6 @@ export function formatMinorUnits(
   if (decimals > 0) {
     const rawFrac = fracPart.toString().padStart(decimals, '0');
     if (decimals > 2) {
-      // For crypto (6-8 decimals), trim trailing zeros down to at least 2 or 4 decimals
       const trimmed = rawFrac.replace(/0+$/, '');
       const minDecimals = Math.min(decimals, 4);
       formattedFrac = '.' + (trimmed.length < minDecimals ? rawFrac.slice(0, minDecimals) : trimmed);
@@ -107,15 +104,44 @@ export function formatMinorUnits(
   return `${sign}${def.symbol}${space}${formattedWhole}${formattedFrac}`;
 }
 
+/**
+ * Pure string-based decimal parser into exact BigInt minor units without IEEE-754 float multiplication (ADR-0003).
+ */
 export function parseMajorToMinorUnits(majorInput: string | number, decimalPlaces: number): string {
   const cleaned = String(majorInput).replace(/,/g, '').trim();
-  if (!cleaned || cleaned === '-' || cleaned === '.') {
+  if (!cleaned || cleaned === '-' || cleaned === '+' || cleaned === '.') {
     return '0';
   }
-  const num = Number(cleaned);
-  if (!Number.isFinite(num)) {
+
+  // Handle scientific notation if a number like 1e-7 was passed
+  let normalizedStr = cleaned;
+  if (/e/i.test(normalizedStr)) {
+    const num = Number(normalizedStr);
+    if (!Number.isFinite(num)) {
+      return '0';
+    }
+    normalizedStr = num.toFixed(Math.max(decimalPlaces + 2, 10));
+  }
+
+  const isNegative = normalizedStr.startsWith('-');
+  const unsigned = normalizedStr.replace(/^[+-]/, '');
+  const parts = unsigned.split('.');
+  if (parts.length > 2) {
     return '0';
   }
-  const factor = Math.pow(10, decimalPlaces);
-  return BigInt(Math.round(num * factor)).toString();
+
+  const wholeStr = (parts[0] || '0').replace(/\D/g, '') || '0';
+  const rawFracStr = (parts[1] || '').replace(/\D/g, '');
+
+  const paddedFrac = rawFracStr.padEnd(decimalPlaces + 1, '0');
+  const activeFrac = decimalPlaces > 0 ? paddedFrac.slice(0, decimalPlaces) : '';
+  const roundingDigit = Number(paddedFrac[decimalPlaces] ?? '0');
+
+  const baseMinor =
+    BigInt(wholeStr) * 10n ** BigInt(decimalPlaces) +
+    (activeFrac ? BigInt(activeFrac) : 0n);
+
+  const roundedMinor = roundingDigit >= 5 ? baseMinor + 1n : baseMinor;
+  const signedMinor = isNegative ? -roundedMinor : roundedMinor;
+  return signedMinor.toString();
 }

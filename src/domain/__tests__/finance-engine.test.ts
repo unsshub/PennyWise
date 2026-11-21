@@ -320,7 +320,7 @@ test('Slice 04 — Flexible Budgets (Monthly, Custom Interval, Custom Date Range
 
   // 2. Category-Specific Budget: $300.00 (30000 cents) on Food & Dining only
   const foodBudget = engine.createBudget({
-    name: 'Food & Dining Cap',
+    name: 'Food & Dining Budget',
     limitAmountMinor: '30000',
     periodType: 'MONTHLY',
     anchorDate: '2026-11-01',
@@ -713,6 +713,84 @@ test('Slice 07 — Modular Home Sections, Themes & Privacy Mask preferences, RFC
   assert.equal(freshEngine.getPreferences().themeMode, 'AMOLED');
   assert.equal(freshEngine.getHomeSections()[0].id, 'PINNED_BUDGETS');
 });
+
+test('Slice 08 — Review Hardening: exact string-based 8-decimal BTC parsing, Snapshot Rate invariance across Base Currency changes, Transaction duplication, and Net Worth History transfer handling', async () => {
+  const { parseMajorToMinorUnits } = await import('../currency');
+  const { evaluateCalculatorExpression } = await import('../calculator');
+
+  // 1. Exact string-based decimal parsing without IEEE-754 float drift on large 8-decimal BTC amounts
+  assert.equal(parseMajorToMinorUnits('21000000.12345678', 8), '2100000012345678');
+
+  // Negative Balance Adjustment evaluation when allowNegative is enabled
+  const negAdj = evaluateCalculatorExpression('-8.50', 2, { allowNegative: true });
+  assert.equal(negAdj.amountMinor, '-850');
+
+  // 2. Changing Base Currency rebases historical Snapshot Rates so past transactions remain invariant in real value
+  const engine = createInMemoryFinanceEngine();
+  const usdWallet = engine.listWallets()[0];
+  engine.updateWallet(usdWallet.id, { initialBalanceMinor: '100000' }); // $1,000.00
+  const eurWallet = engine.createWallet({
+    name: 'Euros',
+    currencyCode: 'EUR',
+    decimalPlaces: 2,
+    initialBalanceMinor: '50000', // €500.00
+  });
+  engine.setExchangeRate({ currencyCode: 'EUR', rateToBase: 2.0 }); // 1 EUR = 2.00 USD
+
+  const foodCat = engine.listCategories()[0];
+  // Spend $100.00 in USD Wallet when Base Currency is USD (Snapshot Rate = 1.0)
+  const usdTx = engine.recordTransaction({
+    type: 'EXPENSE',
+    walletId: usdWallet.id,
+    amountMinor: '10000',
+    categoryId: foodCat.id,
+    title: 'USD Dinner',
+    occurredAt: '2026-11-10T12:00:00.000Z',
+  });
+  assert.equal(engine.convertTransactionToBaseMinor(usdTx), '10000'); // $100.00
+
+  // Switch Base Currency from USD to EUR (where 1 EUR = 2.00 USD -> 1 USD = 0.50 EUR)
+  engine.setBaseCurrency('EUR');
+  const rebasedUsdTx = engine.getTransaction(usdTx.id);
+  assert.equal(rebasedUsdTx.snapshotRateToBase, 0.5);
+  // In the new EUR Base Currency, the $100.00 dinner is worth €50.00 (5000 EUR cents), NOT €100.00!
+  assert.equal(engine.convertTransactionToBaseMinor(rebasedUsdTx), '5000');
+
+  // 3. Transaction Duplication
+  const dupTx = engine.duplicateTransaction(usdTx.id, '2026-11-11T12:00:00.000Z');
+  assert.notEqual(dupTx.id, usdTx.id);
+  assert.equal(dupTx.amountMinor, '10000');
+  assert.equal(engine.getWallet(usdWallet.id).currentBalanceMinor, '80000'); // $1000 - $100 - $100 = $800
+
+  // 4. Net Worth History accounts for Transfers between included and excluded Wallets
+  const excludedStash = engine.createWallet({
+    name: 'Excluded Stash',
+    currencyCode: 'EUR',
+    decimalPlaces: 2,
+    initialBalanceMinor: '0',
+    includeInNetWorth: false,
+  });
+  // Transfer €100.00 (10000 cents) from included Euros Wallet to excluded Stash on 2026-11-15
+  engine.recordTransaction({
+    type: 'TRANSFER',
+    walletId: eurWallet.id,
+    destinationWalletId: excludedStash.id,
+    amountMinor: '10000',
+    occurredAt: '2026-11-15T12:00:00.000Z',
+  });
+
+  const history = engine.computeNetWorthHistory({
+    endDate: '2026-11-16',
+    pointsCount: 2,
+    stepDays: 3, // Point 0: 2026-11-13 (before transfer out), Point 1: 2026-11-16 (after transfer out)
+  });
+  // Before the €100 transfer to an excluded wallet, Net Worth was €100 higher (10000 cents)
+  assert.equal(
+    BigInt(history[0].netWorthMinor) - BigInt(history[1].netWorthMinor),
+    10000n
+  );
+});
+
 
 
 

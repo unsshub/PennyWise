@@ -6,7 +6,7 @@ import React, {
   useMemo,
   useState,
 } from 'react';
-import { useColorScheme } from 'react-native';
+import { AppState, useColorScheme } from 'react-native';
 
 import { formatMinorUnits } from '@/domain/currency';
 import type { FinanceEngine } from '@/domain/finance-engine';
@@ -82,7 +82,6 @@ interface PennyWiseContextValue {
   isAppLocked: boolean;
   unlockApp: () => void;
   syncExchangeRatesNow: () => Promise<boolean>;
-  seedDemoData: () => void;
 }
 
 const PennyWiseContext = createContext<PennyWiseContextValue | null>(null);
@@ -102,13 +101,24 @@ export function PennyWiseProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
-    // On app launch, settle any due autoPay rules and schedule local notifications
     const today = new Date().toISOString().slice(0, 10);
     const settled = engine.processDueAutoPayRules(today);
     if (settled.length > 0) {
       setRevision((r) => r + 1);
     }
     void scheduleUpcomingBillNotifications(engine.listUpcomingPayments());
+  }, [engine]);
+
+  // Re-lock on background resume when Biometric App Lock is enabled
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (nextState) => {
+      if (nextState === 'background' || nextState === 'inactive') {
+        if (engine.getPreferences().biometricLockEnabled) {
+          setIsAppLocked(true);
+        }
+      }
+    });
+    return () => sub.remove();
   }, [engine]);
 
   const baseCurrency = useMemo(() => engine.getBaseCurrency(), [engine, revision]);
@@ -212,186 +222,6 @@ export function PennyWiseProvider({ children }: { children: React.ReactNode }) {
     return ok;
   }, [engine, refresh]);
 
-  const seedDemoData = useCallback(() => {
-    // Populates rich sample multi-currency Wallets (Wallet, Euros, Bitcoin), Budgets, Bills, and Transactions
-    const currentWallets = engine.listWallets();
-    const mainUsd = currentWallets[0];
-    if (mainUsd) {
-      engine.updateWallet(mainUsd.id, {
-        name: 'Wallet',
-        initialBalanceMinor: '345000', // $3,450.00
-        color: '#10B981',
-        icon: '💵',
-      });
-    }
-
-    const hasEur = currentWallets.some((w) => w.currencyCode === 'EUR');
-    const eurWallet = hasEur
-      ? currentWallets.find((w) => w.currencyCode === 'EUR')!
-      : engine.createWallet({
-          name: 'Euros',
-          currencyCode: 'EUR',
-          decimalPlaces: 2,
-          initialBalanceMinor: '125000', // €1,250.00
-          color: '#3B82F6',
-          icon: '€',
-          includeInNetWorth: true,
-        });
-
-    const hasBtc = currentWallets.some((w) => w.currencyCode === 'BTC');
-    if (!hasBtc) {
-      engine.createWallet({
-        name: 'Bitcoin',
-        currencyCode: 'BTC',
-        decimalPlaces: 8,
-        initialBalanceMinor: '4500000', // 0.045 BTC
-        color: '#F59E0B',
-        icon: '₿',
-        includeInNetWorth: true,
-      });
-    }
-
-    const cats = engine.listCategories();
-    const foodCat = cats.find((c) => c.name === 'Food & Dining');
-    const housingCat = cats.find((c) => c.name === 'Housing & Bills');
-    const transportCat = cats.find((c) => c.name === 'Transportation');
-    const entCat = cats.find((c) => c.name === 'Entertainment');
-    const salaryCat = cats.find((c) => c.name === 'Salary & Paycheck');
-
-    const now = new Date();
-    const ym = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-    const prevMonthDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-    const prevYm = `${prevMonthDate.getFullYear()}-${String(prevMonthDate.getMonth() + 1).padStart(2, '0')}`;
-
-    if (engine.listTransactions().length === 0 && mainUsd && foodCat && housingCat && salaryCat) {
-      engine.recordTransaction({
-        type: 'INCOME',
-        walletId: mainUsd.id,
-        amountMinor: '480000',
-        categoryId: salaryCat.id,
-        title: 'Monthly Tech Salary',
-        note: 'Direct deposit',
-        occurredAt: `${ym}-01T09:00:00.000Z`,
-      });
-      engine.recordTransaction({
-        type: 'EXPENSE',
-        walletId: mainUsd.id,
-        amountMinor: '140000',
-        categoryId: housingCat.id,
-        title: 'Apartment Rent',
-        occurredAt: `${ym}-02T10:00:00.000Z`,
-      });
-      engine.recordTransaction({
-        type: 'EXPENSE',
-        walletId: mainUsd.id,
-        amountMinor: '8450',
-        categoryId: foodCat.id,
-        subcategoryId: 'sub-groceries',
-        title: 'Trader Joe\'s Groceries',
-        occurredAt: `${ym}-04T17:30:00.000Z`,
-      });
-      engine.recordTransaction({
-        type: 'EXPENSE',
-        walletId: eurWallet.id,
-        amountMinor: '4500',
-        categoryId: foodCat.id,
-        subcategoryId: 'sub-restaurants',
-        title: 'Café de Flore Paris',
-        note: 'Brunch in Euros',
-        occurredAt: `${ym}-06T12:15:00.000Z`,
-      });
-      if (transportCat) {
-        engine.recordTransaction({
-          type: 'EXPENSE',
-          walletId: mainUsd.id,
-          amountMinor: '4200',
-          categoryId: transportCat.id,
-          subcategoryId: 'sub-fuel',
-          title: 'Shell Station',
-          occurredAt: `${ym}-08T15:00:00.000Z`,
-        });
-      }
-      // Previous month sample transactions for Spending Pace Comparison
-      engine.recordTransaction({
-        type: 'INCOME',
-        walletId: mainUsd.id,
-        amountMinor: '480000',
-        categoryId: salaryCat.id,
-        title: 'Last Month Salary',
-        occurredAt: `${prevYm}-01T09:00:00.000Z`,
-      });
-      engine.recordTransaction({
-        type: 'EXPENSE',
-        walletId: mainUsd.id,
-        amountMinor: '140000',
-        categoryId: housingCat.id,
-        title: 'Last Month Rent',
-        occurredAt: `${prevYm}-02T10:00:00.000Z`,
-      });
-      engine.recordTransaction({
-        type: 'EXPENSE',
-        walletId: mainUsd.id,
-        amountMinor: '21500',
-        categoryId: foodCat.id,
-        title: 'Last Month Dining & Groceries',
-        occurredAt: `${prevYm}-05T19:00:00.000Z`,
-      });
-    }
-
-    if (engine.listBudgets().length === 0 && foodCat) {
-      engine.createBudget({
-        name: 'Monthly Living Budget',
-        limitAmountMinor: '250000', // $2,500.00
-        periodType: 'MONTHLY',
-        anchorDate: `${ym}-01`,
-        scopeType: 'AUTOMATIC_FILTER',
-        color: '#10B981',
-        icon: '🎯',
-      });
-      engine.createBudget({
-        name: 'Food & Dining Cap',
-        limitAmountMinor: '50000', // $500.00
-        periodType: 'MONTHLY',
-        anchorDate: `${ym}-01`,
-        scopeType: 'AUTOMATIC_FILTER',
-        filterCategoryIds: [foodCat.id],
-        color: '#F97316',
-        icon: '🍔',
-      });
-    }
-
-    if (engine.listRecurringRules().length === 0 && mainUsd && entCat && housingCat) {
-      engine.createRecurringRule({
-        title: 'Netflix 4K Plan',
-        type: 'EXPENSE',
-        walletId: mainUsd.id,
-        categoryId: entCat.id,
-        subcategoryId: 'sub-subscriptions',
-        amountMinor: '2299',
-        frequency: 'MONTHLY',
-        intervalCount: 1,
-        nextDueDate: `${ym}-24`,
-        autoPay: true,
-        reminderDaysBefore: 1,
-      });
-      engine.createRecurringRule({
-        title: 'Fiber Gigabit Internet',
-        type: 'EXPENSE',
-        walletId: mainUsd.id,
-        categoryId: housingCat.id,
-        subcategoryId: 'sub-internet',
-        amountMinor: '7000',
-        frequency: 'MONTHLY',
-        intervalCount: 1,
-        nextDueDate: `${ym}-28`,
-        autoPay: false,
-        reminderDaysBefore: 2,
-      });
-    }
-
-    refresh();
-  }, [engine, refresh]);
-
   const value = useMemo<PennyWiseContextValue>(
     () => ({
       engine,
@@ -420,7 +250,6 @@ export function PennyWiseProvider({ children }: { children: React.ReactNode }) {
       isAppLocked,
       unlockApp,
       syncExchangeRatesNow,
-      seedDemoData,
     }),
     [
       engine,
@@ -449,7 +278,6 @@ export function PennyWiseProvider({ children }: { children: React.ReactNode }) {
       isAppLocked,
       unlockApp,
       syncExchangeRatesNow,
-      seedDemoData,
     ]
   );
 

@@ -1,6 +1,8 @@
-import React, { useState } from 'react';
+import { File } from 'expo-file-system';
+import React, { useMemo, useState } from 'react';
 import {
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -13,10 +15,13 @@ import {
 import { usePennyWise } from '@/context/pennywise-context';
 import {
   SUPPORTED_CURRENCIES,
+  convertMinorUnits,
+  getCurrencyDefinition,
   parseMajorToMinorUnits,
 } from '@/domain/currency';
 import type {
   RecurringFrequency,
+  RecurringRule,
   ThemeMode,
   UpcomingPayment,
 } from '@/domain/types';
@@ -24,6 +29,8 @@ import {
   scheduleUpcomingBillNotifications,
   shareExportedContent,
 } from '@/services/device-services';
+
+declare const require: (name: string) => any;
 
 const ACCENT_PALETTES = [
   { name: 'Emerald', hex: '#10B981' },
@@ -40,6 +47,7 @@ export default function BillsAndSettingsScreen() {
     baseCurrency,
     wallets,
     categories,
+    recurringRules,
     upcomingPayments,
     exchangeRates,
     homeSections,
@@ -51,19 +59,23 @@ export default function BillsAndSettingsScreen() {
   } = usePennyWise();
 
   const [billModalOpen, setBillModalOpen] = useState(false);
+  const [editingRule, setEditingRule] = useState<RecurringRule | null>(null);
   const [billTitle, setBillTitle] = useState('');
+  const [billType, setBillType] = useState<'EXPENSE' | 'INCOME'>('EXPENSE');
   const [billAmountMajor, setBillAmountMajor] = useState('15.99');
   const [billWalletId, setBillWalletId] = useState(wallets[0]?.id ?? '');
   const [billCategoryId, setBillCategoryId] = useState(
     categories.find((c) => c.parentId === null && c.flowType === 'EXPENSE')?.id ??
       'cat-housing'
   );
+  const [billSubcategoryId, setBillSubcategoryId] = useState<string | null>(null);
   const [billDueDate, setBillDueDate] = useState(
     () => new Date().toISOString().slice(0, 10)
   );
   const [billIsRecurring, setBillIsRecurring] = useState(true);
   const [billFrequency, setBillFrequency] =
     useState<RecurringFrequency>('MONTHLY');
+  const [billIntervalCount, setBillIntervalCount] = useState('1');
   const [billAutoPay, setBillAutoPay] = useState(false);
   const [billReminderDays, setBillReminderDays] = useState('1');
 
@@ -80,7 +92,64 @@ export default function BillsAndSettingsScreen() {
   const [backupJsonText, setBackupJsonText] = useState('');
   const [statusBanner, setStatusBanner] = useState<string | null>(null);
 
-  const handleCreateBill = () => {
+  // Compute "Total Upcoming Bills This Period" converted to Base Currency
+  const totalUpcomingBillsThisPeriodMinor = useMemo(() => {
+    const baseDef = getCurrencyDefinition(baseCurrency);
+    let sumBig = 0n;
+    for (const bill of upcomingPayments) {
+      if (bill.type !== 'EXPENSE') {
+        continue;
+      }
+      const rate = engine.getExchangeRateToBase(bill.currencyCode);
+      const converted = convertMinorUnits(
+        bill.amountMinor,
+        bill.decimalPlaces,
+        baseDef.decimalPlaces,
+        rate
+      );
+      sumBig += BigInt(converted);
+    }
+    return sumBig.toString();
+  }, [upcomingPayments, baseCurrency, engine]);
+
+  const openBillModal = (rule: RecurringRule | null) => {
+    setEditingRule(rule);
+    if (rule) {
+      setBillTitle(rule.title);
+      setBillType(rule.type);
+      setBillAmountMajor(
+        (Number(rule.amountMinor) / Math.pow(10, rule.decimalPlaces)).toString()
+      );
+      setBillWalletId(rule.walletId);
+      setBillCategoryId(rule.categoryId);
+      setBillSubcategoryId(rule.subcategoryId);
+      setBillDueDate(rule.nextDueDate);
+      setBillIsRecurring(true);
+      setBillFrequency(rule.frequency);
+      setBillIntervalCount(String(rule.intervalCount));
+      setBillAutoPay(rule.autoPay);
+      setBillReminderDays(String(rule.reminderDaysBefore));
+    } else {
+      setBillTitle('');
+      setBillType('EXPENSE');
+      setBillAmountMajor('15.99');
+      setBillWalletId(wallets[0]?.id ?? '');
+      const firstCat = categories.find(
+        (c) => c.parentId === null && c.flowType === 'EXPENSE'
+      );
+      setBillCategoryId(firstCat?.id ?? 'cat-housing');
+      setBillSubcategoryId(null);
+      setBillDueDate(new Date().toISOString().slice(0, 10));
+      setBillIsRecurring(true);
+      setBillFrequency('MONTHLY');
+      setBillIntervalCount('1');
+      setBillAutoPay(false);
+      setBillReminderDays('1');
+    }
+    setBillModalOpen(true);
+  };
+
+  const handleSaveBill = () => {
     const w = wallets.find((item) => item.id === billWalletId) ?? wallets[0];
     if (!w || !billTitle.trim()) {
       return;
@@ -90,36 +159,53 @@ export default function BillsAndSettingsScreen() {
       return;
     }
 
-    if (billIsRecurring) {
-      engine.createRecurringRule({
+    if (editingRule) {
+      engine.updateRecurringRule(editingRule.id, {
         title: billTitle.trim(),
-        type: 'EXPENSE',
+        type: billType,
         walletId: w.id,
         categoryId: billCategoryId,
+        subcategoryId: billSubcategoryId,
         amountMinor,
+        currencyCode: w.currencyCode,
+        decimalPlaces: w.decimalPlaces,
         frequency: billFrequency,
-        intervalCount: 1,
+        intervalCount: Math.max(1, Number(billIntervalCount) || 1),
         nextDueDate: billDueDate,
         autoPay: billAutoPay,
-        reminderDaysBefore: Number(billReminderDays) || 1,
+        reminderDaysBefore: Number(billReminderDays) || 0,
+      });
+    } else if (billIsRecurring) {
+      engine.createRecurringRule({
+        title: billTitle.trim(),
+        type: billType,
+        walletId: w.id,
+        categoryId: billCategoryId,
+        subcategoryId: billSubcategoryId,
+        amountMinor,
+        frequency: billFrequency,
+        intervalCount: Math.max(1, Number(billIntervalCount) || 1),
+        nextDueDate: billDueDate,
+        autoPay: billAutoPay,
+        reminderDaysBefore: Number(billReminderDays) || 0,
       });
     } else {
       engine.createUpcomingPayment({
         title: billTitle.trim(),
-        type: 'EXPENSE',
+        type: billType,
         walletId: w.id,
         categoryId: billCategoryId,
+        subcategoryId: billSubcategoryId,
         amountMinor,
         dueDate: billDueDate,
         autoPay: billAutoPay,
-        reminderDaysBefore: Number(billReminderDays) || 1,
+        reminderDaysBefore: Number(billReminderDays) || 0,
       });
     }
 
     void scheduleUpcomingBillNotifications(engine.listUpcomingPayments());
     refresh();
     setBillModalOpen(false);
-    setBillTitle('');
   };
 
   const handleConfirmMarkPaid = () => {
@@ -170,12 +256,6 @@ export default function BillsAndSettingsScreen() {
     setStatusBanner('CSV exported successfully!');
   };
 
-  const handleOpenBackupExport = async () => {
-    const json = engine.exportBackupSnapshotJson();
-    setBackupJsonText(json);
-    setBackupModalOpen(true);
-  };
-
   const handleShareBackupFile = async () => {
     const json = engine.exportBackupSnapshotJson();
     await shareExportedContent({
@@ -186,7 +266,51 @@ export default function BillsAndSettingsScreen() {
     setStatusBanner('Backup Snapshot exported!');
   };
 
-  const handleRestoreBackup = () => {
+  const handlePickAndRestoreBackupFile = async () => {
+    if (Platform.OS === 'web' && typeof document !== 'undefined') {
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = '.json,application/json';
+      input.onchange = async (e: any) => {
+        const file = e?.target?.files?.[0];
+        if (!file) {
+          return;
+        }
+        const text = await file.text();
+        try {
+          engine.restoreBackupSnapshotJson(text);
+          refresh();
+          setStatusBanner('Backup Snapshot restored from file!');
+        } catch (err: any) {
+          setStatusBanner(`Restore error: ${err?.message ?? 'Invalid file'}`);
+        }
+      };
+      input.click();
+      return;
+    }
+
+    try {
+      const DocumentPicker = require('expo-document-picker');
+      const result = await DocumentPicker.getDocumentAsync({
+        type: 'application/json',
+        copyToCacheDirectory: true,
+      });
+      if (result.canceled || !result.assets?.[0]?.uri) {
+        return;
+      }
+      const pickedFile = new File(result.assets[0].uri);
+      const rawJson = await pickedFile.text();
+      engine.restoreBackupSnapshotJson(rawJson);
+      refresh();
+      setStatusBanner('Backup Snapshot restored from file!');
+    } catch {
+      // Fallback to inspect/paste modal if native document picker module is not installed
+      setBackupJsonText(engine.exportBackupSnapshotJson());
+      setBackupModalOpen(true);
+    }
+  };
+
+  const handleRestoreFromModal = () => {
     try {
       engine.restoreBackupSnapshotJson(backupJsonText);
       refresh();
@@ -196,6 +320,19 @@ export default function BillsAndSettingsScreen() {
       setStatusBanner(`Restore error: ${err?.message ?? 'Invalid JSON'}`);
     }
   };
+
+  const topCategoriesForBillType = useMemo(
+    () =>
+      categories.filter(
+        (c) => c.parentId === null && c.flowType === billType
+      ),
+    [categories, billType]
+  );
+
+  const subcategoriesForBillCat = useMemo(
+    () => categories.filter((c) => c.parentId === billCategoryId),
+    [categories, billCategoryId]
+  );
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
@@ -237,14 +374,14 @@ export default function BillsAndSettingsScreen() {
                 🗓️ Upcoming Bills & Subscriptions
               </Text>
               <Text style={[styles.cardSub, { color: theme.textSecondary }]}>
-                Future payments stay isolated from Wallet balances until settled
+                Total Upcoming Bills This Period:{' '}
+                <Text style={{ color: theme.textPrimary, fontWeight: '800' }}>
+                  {formatAmount(totalUpcomingBillsThisPeriodMinor, baseCurrency)}
+                </Text>
               </Text>
             </View>
             <Pressable
-              onPress={() => {
-                setBillWalletId(wallets[0]?.id ?? '');
-                setBillModalOpen(true);
-              }}
+              onPress={() => openBillModal(null)}
               style={[styles.primarySmallBtn, { backgroundColor: theme.accent }]}
             >
               <Text style={styles.primarySmallBtnText}>+ Add Bill</Text>
@@ -269,7 +406,16 @@ export default function BillsAndSettingsScreen() {
                       fontSize: 14,
                     }}
                   >
-                    {bill.title}
+                    {bill.title}{' '}
+                    <Text
+                      style={{
+                        color:
+                          bill.type === 'INCOME' ? theme.success : theme.danger,
+                        fontSize: 11,
+                      }}
+                    >
+                      ({bill.type})
+                    </Text>
                   </Text>
                   <Text style={{ color: theme.textSecondary, fontSize: 11 }}>
                     Due {bill.dueDate} •{' '}
@@ -338,6 +484,86 @@ export default function BillsAndSettingsScreen() {
                 </View>
               </View>
             ))
+          )}
+
+          {/* Active & Paused Recurring Rules Manager (Edit, Pause/Resume, Delete) */}
+          {recurringRules.length > 0 && (
+            <View style={{ marginTop: 12 }}>
+              <Text style={[styles.subLabel, { color: theme.textSecondary }]}>
+                Recurring Rules ({recurringRules.length}) — Tap to Edit, Pause, or Delete
+              </Text>
+              {recurringRules.map((rule) => (
+                <View
+                  key={rule.id}
+                  style={[styles.billItem, { borderColor: theme.border }]}
+                >
+                  <Pressable
+                    onPress={() => openBillModal(rule)}
+                    style={{ flex: 1 }}
+                  >
+                    <Text
+                      style={{
+                        color: rule.isActive
+                          ? theme.textPrimary
+                          : theme.textMuted,
+                        fontWeight: '700',
+                        fontSize: 13,
+                      }}
+                    >
+                      {rule.title} ({rule.frequency} × {rule.intervalCount}) ✎
+                    </Text>
+                    <Text style={{ color: theme.textSecondary, fontSize: 11 }}>
+                      Next: {rule.nextDueDate} •{' '}
+                      {rule.isActive ? 'Active' : 'Paused'}
+                    </Text>
+                  </Pressable>
+                  <View style={{ flexDirection: 'row', gap: 6 }}>
+                    <Pressable
+                      onPress={() => {
+                        engine.updateRecurringRule(rule.id, {
+                          isActive: !rule.isActive,
+                        });
+                        refresh();
+                      }}
+                      style={[
+                        styles.actionChip,
+                        { backgroundColor: theme.surfaceElevated },
+                      ]}
+                    >
+                      <Text
+                        style={{
+                          color: theme.textPrimary,
+                          fontSize: 11,
+                          fontWeight: '700',
+                        }}
+                      >
+                        {rule.isActive ? 'Pause' : 'Resume'}
+                      </Text>
+                    </Pressable>
+                    <Pressable
+                      onPress={() => {
+                        engine.deleteRecurringRule(rule.id);
+                        refresh();
+                      }}
+                      style={[
+                        styles.actionChip,
+                        { backgroundColor: theme.danger + '22' },
+                      ]}
+                    >
+                      <Text
+                        style={{
+                          color: theme.danger,
+                          fontSize: 11,
+                          fontWeight: '700',
+                        }}
+                      >
+                        Delete
+                      </Text>
+                    </Pressable>
+                  </View>
+                </View>
+              ))}
+            </View>
           )}
         </View>
 
@@ -681,7 +907,7 @@ export default function BillsAndSettingsScreen() {
                 Biometric App Lock
               </Text>
               <Text style={{ color: theme.textSecondary, fontSize: 12 }}>
-                Require Android fingerprint / face unlock when opening PennyWise
+                Require Android fingerprint / face unlock on launch & resume
               </Text>
             </View>
             <Switch
@@ -737,7 +963,7 @@ export default function BillsAndSettingsScreen() {
                   fontSize: 14,
                 }}
               >
-                📄 Export Transactions to CSV
+                📄 Export All Transactions to CSV
               </Text>
             </Pressable>
 
@@ -763,7 +989,7 @@ export default function BillsAndSettingsScreen() {
             </Pressable>
 
             <Pressable
-              onPress={handleOpenBackupExport}
+              onPress={handlePickAndRestoreBackupFile}
               style={[
                 styles.portabilityBtn,
                 {
@@ -779,14 +1005,38 @@ export default function BillsAndSettingsScreen() {
                   fontSize: 14,
                 }}
               >
-                🔄 Inspect / Restore Backup Snapshot
+                📂 Pick & Restore Backup Snapshot File
+              </Text>
+            </Pressable>
+
+            <Pressable
+              onPress={() => {
+                setBackupJsonText(engine.exportBackupSnapshotJson());
+                setBackupModalOpen(true);
+              }}
+              style={[
+                styles.portabilityBtn,
+                {
+                  backgroundColor: theme.surfaceElevated,
+                  borderColor: theme.border,
+                },
+              ]}
+            >
+              <Text
+                style={{
+                  color: theme.textSecondary,
+                  fontWeight: '700',
+                  fontSize: 13,
+                }}
+              >
+                🔄 Inspect / Paste Backup Snapshot JSON
               </Text>
             </Pressable>
           </View>
         </View>
       </ScrollView>
 
-      {/* Add Bill / Recurring Subscription Modal */}
+      {/* Add / Edit Bill or Recurring Rule Modal */}
       <Modal
         visible={billModalOpen}
         animationType="slide"
@@ -802,148 +1052,354 @@ export default function BillsAndSettingsScreen() {
           >
             <View style={styles.cardHeader}>
               <Text style={[styles.cardTitle, { color: theme.textPrimary }]}>
-                Add Subscription or Upcoming Bill
+                {editingRule
+                  ? 'Edit Recurring Rule'
+                  : 'Add Subscription, Bill, or Regular Income'}
               </Text>
               <Pressable onPress={() => setBillModalOpen(false)}>
                 <Text style={{ color: theme.textSecondary, fontSize: 18 }}>✕</Text>
               </Pressable>
             </View>
 
-            <Text style={[styles.subLabel, { color: theme.textSecondary }]}>
-              Title / Service
-            </Text>
-            <TextInput
-              value={billTitle}
-              onChangeText={setBillTitle}
-              placeholder="e.g. Netflix, Electric Bill, Car Insurance"
-              placeholderTextColor={theme.textMuted}
-              style={[
-                styles.input,
-                {
-                  backgroundColor: theme.surfaceElevated,
-                  color: theme.textPrimary,
-                  borderColor: theme.border,
-                },
-              ]}
-            />
-
-            <View style={{ flexDirection: 'row', gap: 10 }}>
-              <View style={{ flex: 1 }}>
-                <Text style={[styles.subLabel, { color: theme.textSecondary }]}>
-                  Amount
-                </Text>
-                <TextInput
-                  value={billAmountMajor}
-                  onChangeText={setBillAmountMajor}
-                  keyboardType="decimal-pad"
-                  style={[
-                    styles.input,
-                    {
-                      backgroundColor: theme.surfaceElevated,
-                      color: theme.textPrimary,
-                      borderColor: theme.border,
-                    },
-                  ]}
-                />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={[styles.subLabel, { color: theme.textSecondary }]}>
-                  Next Due Date
-                </Text>
-                <TextInput
-                  value={billDueDate}
-                  onChangeText={setBillDueDate}
-                  placeholder="YYYY-MM-DD"
-                  style={[
-                    styles.input,
-                    {
-                      backgroundColor: theme.surfaceElevated,
-                      color: theme.textPrimary,
-                      borderColor: theme.border,
-                    },
-                  ]}
-                />
-              </View>
-            </View>
-
-            <View style={styles.switchItem}>
-              <Text style={{ color: theme.textPrimary, fontWeight: '700' }}>
-                Recurring Subscription / Bill
-              </Text>
-              <Switch
-                value={billIsRecurring}
-                onValueChange={setBillIsRecurring}
-                trackColor={{ false: theme.border, true: theme.accent }}
-              />
-            </View>
-
-            {billIsRecurring && (
+            <ScrollView showsVerticalScrollIndicator={false}>
               <View style={styles.segmentRow}>
-                {(['WEEKLY', 'MONTHLY', 'YEARLY'] as RecurringFrequency[]).map(
-                  (freq) => (
+                {(['EXPENSE', 'INCOME'] as const).map((tp) => {
+                  const active = billType === tp;
+                  return (
                     <Pressable
-                      key={freq}
-                      onPress={() => setBillFrequency(freq)}
+                      key={tp}
+                      onPress={() => {
+                        setBillType(tp);
+                        const firstCat = categories.find(
+                          (c) => c.parentId === null && c.flowType === tp
+                        );
+                        setBillCategoryId(firstCat?.id ?? billCategoryId);
+                        setBillSubcategoryId(null);
+                      }}
                       style={[
                         styles.segmentBtn,
                         {
-                          backgroundColor:
-                            billFrequency === freq
-                              ? theme.accent
-                              : theme.surfaceElevated,
+                          backgroundColor: active
+                            ? theme.accent
+                            : theme.surfaceElevated,
                         },
                       ]}
                     >
                       <Text
                         style={{
-                          color:
-                            billFrequency === freq
-                              ? '#FFFFFF'
-                              : theme.textSecondary,
-                          fontSize: 11,
+                          color: active ? '#FFFFFF' : theme.textSecondary,
+                          fontSize: 12,
                           fontWeight: '800',
                         }}
                       >
-                        {freq}
+                        {tp}
                       </Text>
                     </Pressable>
-                  )
-                )}
+                  );
+                })}
               </View>
-            )}
 
-            <View style={styles.switchItem}>
-              <View style={{ flex: 1 }}>
-                <Text style={{ color: theme.textPrimary, fontWeight: '700' }}>
-                  Auto-Pay on Due Date
-                </Text>
-                <Text style={{ color: theme.textSecondary, fontSize: 11 }}>
-                  Automatically posts as a Transaction when due date arrives
-                </Text>
-              </View>
-              <Switch
-                value={billAutoPay}
-                onValueChange={setBillAutoPay}
-                trackColor={{ false: theme.border, true: theme.accent }}
+              <Text style={[styles.subLabel, { color: theme.textSecondary }]}>
+                Title / Service
+              </Text>
+              <TextInput
+                value={billTitle}
+                onChangeText={setBillTitle}
+                placeholder="e.g. Netflix, Electric Bill, Paycheck"
+                placeholderTextColor={theme.textMuted}
+                style={[
+                  styles.input,
+                  {
+                    backgroundColor: theme.surfaceElevated,
+                    color: theme.textPrimary,
+                    borderColor: theme.border,
+                  },
+                ]}
               />
-            </View>
+
+              <Text style={[styles.subLabel, { color: theme.textSecondary }]}>
+                Wallet
+              </Text>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                style={{ marginBottom: 6 }}
+              >
+                {wallets.map((w) => {
+                  const active = w.id === billWalletId;
+                  return (
+                    <Pressable
+                      key={w.id}
+                      onPress={() => setBillWalletId(w.id)}
+                      style={[
+                        styles.currencyChip,
+                        {
+                          backgroundColor: active
+                            ? w.color
+                            : theme.surfaceElevated,
+                          borderColor: active ? w.color : theme.border,
+                        },
+                      ]}
+                    >
+                      <Text
+                        style={{
+                          color: active ? '#FFFFFF' : theme.textPrimary,
+                          fontWeight: '700',
+                          fontSize: 12,
+                        }}
+                      >
+                        {w.icon} {w.name}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </ScrollView>
+
+              <Text style={[styles.subLabel, { color: theme.textSecondary }]}>
+                Category & Subcategory
+              </Text>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                style={{ marginBottom: 6 }}
+              >
+                {topCategoriesForBillType.map((c) => {
+                  const active = c.id === billCategoryId;
+                  return (
+                    <Pressable
+                      key={c.id}
+                      onPress={() => {
+                        setBillCategoryId(c.id);
+                        setBillSubcategoryId(null);
+                      }}
+                      style={[
+                        styles.currencyChip,
+                        {
+                          backgroundColor: active
+                            ? c.color
+                            : theme.surfaceElevated,
+                          borderColor: active ? c.color : theme.border,
+                        },
+                      ]}
+                    >
+                      <Text
+                        style={{
+                          color: active ? '#FFFFFF' : theme.textPrimary,
+                          fontWeight: '700',
+                          fontSize: 12,
+                        }}
+                      >
+                        {c.icon} {c.name}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </ScrollView>
+
+              {subcategoriesForBillCat.length > 0 && (
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  style={{ marginBottom: 6 }}
+                >
+                  {subcategoriesForBillCat.map((sub) => {
+                    const active = sub.id === billSubcategoryId;
+                    return (
+                      <Pressable
+                        key={sub.id}
+                        onPress={() =>
+                          setBillSubcategoryId(active ? null : sub.id)
+                        }
+                        style={[
+                          styles.currencyChip,
+                          {
+                            backgroundColor: active
+                              ? sub.color
+                              : theme.surfaceElevated,
+                            borderColor: theme.border,
+                          },
+                        ]}
+                      >
+                        <Text
+                          style={{
+                            color: active ? '#FFFFFF' : theme.textPrimary,
+                            fontWeight: '700',
+                            fontSize: 11,
+                          }}
+                        >
+                          {sub.icon} {sub.name}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </ScrollView>
+              )}
+
+              <View style={{ flexDirection: 'row', gap: 10 }}>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.subLabel, { color: theme.textSecondary }]}>
+                    Amount
+                  </Text>
+                  <TextInput
+                    value={billAmountMajor}
+                    onChangeText={setBillAmountMajor}
+                    keyboardType="decimal-pad"
+                    style={[
+                      styles.input,
+                      {
+                        backgroundColor: theme.surfaceElevated,
+                        color: theme.textPrimary,
+                        borderColor: theme.border,
+                      },
+                    ]}
+                  />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.subLabel, { color: theme.textSecondary }]}>
+                    Next Due Date
+                  </Text>
+                  <TextInput
+                    value={billDueDate}
+                    onChangeText={setBillDueDate}
+                    placeholder="YYYY-MM-DD"
+                    style={[
+                      styles.input,
+                      {
+                        backgroundColor: theme.surfaceElevated,
+                        color: theme.textPrimary,
+                        borderColor: theme.border,
+                      },
+                    ]}
+                  />
+                </View>
+              </View>
+
+              {!editingRule && (
+                <View style={styles.switchItem}>
+                  <Text style={{ color: theme.textPrimary, fontWeight: '700' }}>
+                    Recurring Schedule
+                  </Text>
+                  <Switch
+                    value={billIsRecurring}
+                    onValueChange={setBillIsRecurring}
+                    trackColor={{ false: theme.border, true: theme.accent }}
+                  />
+                </View>
+              )}
+
+              {(billIsRecurring || editingRule) && (
+                <>
+                  <View style={[styles.segmentRow, { marginTop: 8 }]}>
+                    {(
+                      ['DAILY', 'WEEKLY', 'MONTHLY', 'YEARLY', 'INTERVAL'] as RecurringFrequency[]
+                    ).map((freq) => (
+                      <Pressable
+                        key={freq}
+                        onPress={() => setBillFrequency(freq)}
+                        style={[
+                          styles.segmentBtn,
+                          {
+                            backgroundColor:
+                              billFrequency === freq
+                                ? theme.accent
+                                : theme.surfaceElevated,
+                          },
+                        ]}
+                      >
+                        <Text
+                          style={{
+                            color:
+                              billFrequency === freq
+                                ? '#FFFFFF'
+                                : theme.textSecondary,
+                            fontSize: 10,
+                            fontWeight: '800',
+                          }}
+                        >
+                          {freq}
+                        </Text>
+                      </Pressable>
+                    ))}
+                  </View>
+
+                  <View style={{ flexDirection: 'row', gap: 10 }}>
+                    <View style={{ flex: 1 }}>
+                      <Text
+                        style={[styles.subLabel, { color: theme.textSecondary }]}
+                      >
+                        Every N Cycles
+                      </Text>
+                      <TextInput
+                        value={billIntervalCount}
+                        onChangeText={setBillIntervalCount}
+                        keyboardType="number-pad"
+                        style={[
+                          styles.input,
+                          {
+                            backgroundColor: theme.surfaceElevated,
+                            color: theme.textPrimary,
+                            borderColor: theme.border,
+                          },
+                        ]}
+                      />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text
+                        style={[styles.subLabel, { color: theme.textSecondary }]}
+                      >
+                        Remind Days Before
+                      </Text>
+                      <TextInput
+                        value={billReminderDays}
+                        onChangeText={setBillReminderDays}
+                        keyboardType="number-pad"
+                        style={[
+                          styles.input,
+                          {
+                            backgroundColor: theme.surfaceElevated,
+                            color: theme.textPrimary,
+                            borderColor: theme.border,
+                          },
+                        ]}
+                      />
+                    </View>
+                  </View>
+                </>
+              )}
+
+              <View style={styles.switchItem}>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ color: theme.textPrimary, fontWeight: '700' }}>
+                    Auto-Pay on Due Date
+                  </Text>
+                  <Text style={{ color: theme.textSecondary, fontSize: 11 }}>
+                    Automatically posts as a Transaction when due date arrives
+                  </Text>
+                </View>
+                <Switch
+                  value={billAutoPay}
+                  onValueChange={setBillAutoPay}
+                  trackColor={{ false: theme.border, true: theme.accent }}
+                />
+              </View>
+            </ScrollView>
 
             <Pressable
-              onPress={handleCreateBill}
+              onPress={handleSaveBill}
               style={[
                 styles.saveBtn,
                 { backgroundColor: theme.accent, marginTop: 12 },
               ]}
             >
               <Text style={{ color: '#FFFFFF', fontWeight: '800', fontSize: 15 }}>
-                Save Upcoming Bill
+                {editingRule ? 'Update Recurring Rule' : 'Save Scheduled Bill'}
               </Text>
             </Pressable>
           </View>
         </View>
       </Modal>
 
-      {/* Mark as Paid Confirmation Modal (with editable utility bill amount) */}
+      {/* Mark as Paid Confirmation Modal */}
       <Modal
         visible={!!payingBill}
         animationType="fade"
@@ -1046,7 +1502,7 @@ export default function BillsAndSettingsScreen() {
               ]}
             />
             <Pressable
-              onPress={handleRestoreBackup}
+              onPress={handleRestoreFromModal}
               style={[
                 styles.saveBtn,
                 { backgroundColor: theme.accent, marginTop: 12 },
@@ -1223,6 +1679,7 @@ const styles = StyleSheet.create({
     borderRadius: 22,
     borderWidth: 1,
     padding: 18,
+    maxHeight: '90%',
   },
   input: {
     borderRadius: 12,

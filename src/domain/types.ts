@@ -203,6 +203,7 @@ export interface UserPreferences {
   accentColor: string;
   privacyMaskEnabled: boolean;
   biometricLockEnabled: boolean;
+  hasCompletedOnboarding?: boolean;
 }
 
 export interface BackupSnapshot {

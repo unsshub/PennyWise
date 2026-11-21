@@ -24,6 +24,7 @@ const KEYPAD_ROWS = [
 export function QuickEntryModal() {
   const {
     engine,
+    baseCurrency,
     wallets,
     categories,
     budgets,
@@ -36,11 +37,13 @@ export function QuickEntryModal() {
 
   const editingTx = quickEntryDraft?.editingTransaction ?? null;
 
-  const [txType, setTxType] = useState<'EXPENSE' | 'INCOME' | 'TRANSFER'>('EXPENSE');
+  const [txType, setTxType] = useState<TransactionType>('EXPENSE');
   const [expression, setExpression] = useState('');
   const [walletId, setWalletId] = useState('');
   const [destinationWalletId, setDestinationWalletId] = useState('');
   const [customDestinationMajor, setCustomDestinationMajor] = useState('');
+  const [snapshotRateInput, setSnapshotRateInput] = useState('');
+  const [occurredAtInput, setOccurredAtInput] = useState('');
   const [categoryId, setCategoryId] = useState<string | null>(null);
   const [subcategoryId, setSubcategoryId] = useState<string | null>(null);
   const [manualBudgetId, setManualBudgetId] = useState<string | null>(null);
@@ -55,9 +58,7 @@ export function QuickEntryModal() {
       quickEntryDraft?.defaultWalletId ?? wallets[0]?.id ?? 'wallet-default-cash';
 
     if (editingTx) {
-      const editType =
-        editingTx.type === 'BALANCE_ADJUSTMENT' ? 'EXPENSE' : editingTx.type;
-      setTxType(editType);
+      setTxType(editingTx.type);
       const majorVal = (
         Number(editingTx.amountMinor) / Math.pow(10, editingTx.decimalPlaces)
       ).toString();
@@ -77,6 +78,8 @@ export function QuickEntryModal() {
       } else {
         setCustomDestinationMajor('');
       }
+      setSnapshotRateInput(String(editingTx.snapshotRateToBase));
+      setOccurredAtInput(editingTx.occurredAt.slice(0, 10));
       setCategoryId(editingTx.categoryId);
       setSubcategoryId(editingTx.subcategoryId);
       setManualBudgetId(editingTx.manualBudgetId);
@@ -91,6 +94,10 @@ export function QuickEntryModal() {
         wallets.find((w) => w.id !== defaultWallet)?.id ?? defaultWallet;
       setDestinationWalletId(secondWallet);
       setCustomDestinationMajor('');
+      const wObj = wallets.find((w) => w.id === defaultWallet) ?? wallets[0];
+      const liveRate = engine.getExchangeRateToBase(wObj?.currencyCode ?? baseCurrency);
+      setSnapshotRateInput(String(liveRate));
+      setOccurredAtInput(new Date().toISOString().slice(0, 10));
       const flowCats = categories.filter(
         (c) =>
           c.parentId === null &&
@@ -102,7 +109,15 @@ export function QuickEntryModal() {
       setTitle('');
       setNote('');
     }
-  }, [isQuickEntryOpen, editingTx, quickEntryDraft, wallets, categories]);
+  }, [
+    isQuickEntryOpen,
+    editingTx,
+    quickEntryDraft,
+    wallets,
+    categories,
+    engine,
+    baseCurrency,
+  ]);
 
   const selectedWallet = useMemo(
     () => wallets.find((w) => w.id === walletId) ?? wallets[0],
@@ -123,10 +138,19 @@ export function QuickEntryModal() {
     () =>
       evaluateCalculatorExpression(
         expression,
-        selectedWallet?.decimalPlaces ?? 2
+        selectedWallet?.decimalPlaces ?? 2,
+        { allowNegative: txType === 'BALANCE_ADJUSTMENT' }
       ),
-    [expression, selectedWallet]
+    [expression, selectedWallet, txType]
   );
+
+  const parsedSnapshotRate = useMemo(() => {
+    const n = Number(snapshotRateInput);
+    if (Number.isFinite(n) && n > 0) {
+      return n;
+    }
+    return engine.getExchangeRateToBase(selectedWallet?.currencyCode ?? baseCurrency);
+  }, [snapshotRateInput, engine, selectedWallet, baseCurrency]);
 
   const prefilledDestinationMinor = useMemo(() => {
     if (txType !== 'TRANSFER' || !selectedWallet || !destinationWallet) {
@@ -135,19 +159,25 @@ export function QuickEntryModal() {
     if (selectedWallet.currencyCode === destinationWallet.currencyCode) {
       return evalResult.amountMinor;
     }
-    const srcRate = engine.getExchangeRateToBase(selectedWallet.currencyCode);
     const dstRate = engine.getExchangeRateToBase(destinationWallet.currencyCode);
-    const crossRate = dstRate > 0 ? srcRate / dstRate : 1;
+    const crossRate = dstRate > 0 ? parsedSnapshotRate / dstRate : 1;
     return convertMinorUnits(
       evalResult.amountMinor,
       selectedWallet.decimalPlaces,
       destinationWallet.decimalPlaces,
       crossRate
     );
-  }, [txType, selectedWallet, destinationWallet, evalResult.amountMinor, engine]);
+  }, [
+    txType,
+    selectedWallet,
+    destinationWallet,
+    evalResult.amountMinor,
+    parsedSnapshotRate,
+    engine,
+  ]);
 
   const topCategories = useMemo(() => {
-    if (txType === 'TRANSFER') {
+    if (txType === 'TRANSFER' || txType === 'BALANCE_ADJUSTMENT') {
       return [];
     }
     return categories.filter(
@@ -156,7 +186,7 @@ export function QuickEntryModal() {
   }, [categories, txType]);
 
   const availableSubcategories = useMemo(() => {
-    if (!categoryId || txType === 'TRANSFER') {
+    if (!categoryId || txType === 'TRANSFER' || txType === 'BALANCE_ADJUSTMENT') {
       return [];
     }
     return categories.filter((c) => c.parentId === categoryId);
@@ -176,7 +206,12 @@ export function QuickEntryModal() {
   };
 
   const handleSave = () => {
-    if (!selectedWallet || BigInt(evalResult.amountMinor) <= 0n) {
+    const amountBig = BigInt(evalResult.amountMinor);
+    if (
+      !selectedWallet ||
+      (txType !== 'BALANCE_ADJUSTMENT' && amountBig <= 0n) ||
+      (txType === 'BALANCE_ADJUSTMENT' && amountBig === 0n)
+    ) {
       return;
     }
 
@@ -193,6 +228,14 @@ export function QuickEntryModal() {
       }
     }
 
+    const validDatePrefix = /^\d{4}-\d{2}-\d{2}$/.test(occurredAtInput.trim())
+      ? occurredAtInput.trim()
+      : new Date().toISOString().slice(0, 10);
+    const fullOccurredAt =
+      editingTx && editingTx.occurredAt.startsWith(validDatePrefix)
+        ? editingTx.occurredAt
+        : `${validDatePrefix}T12:00:00.000Z`;
+
     if (editingTx) {
       engine.updateTransaction(editingTx.id, {
         walletId: selectedWallet.id,
@@ -200,28 +243,53 @@ export function QuickEntryModal() {
           txType === 'TRANSFER' ? destinationWallet?.id ?? null : null,
         amountMinor: evalResult.amountMinor,
         destinationAmountMinor: finalDestMinor,
-        categoryId: txType === 'TRANSFER' ? null : categoryId,
-        subcategoryId: txType === 'TRANSFER' ? null : subcategoryId,
+        snapshotRateToBase: parsedSnapshotRate,
+        categoryId:
+          txType === 'TRANSFER' || txType === 'BALANCE_ADJUSTMENT'
+            ? null
+            : categoryId,
+        subcategoryId:
+          txType === 'TRANSFER' || txType === 'BALANCE_ADJUSTMENT'
+            ? null
+            : subcategoryId,
         manualBudgetId: txType === 'EXPENSE' ? manualBudgetId : null,
         title: title.trim() || editingTx.title,
         note,
+        occurredAt: fullOccurredAt,
       });
     } else {
       engine.recordTransaction({
-        type: txType as TransactionType,
+        type: txType,
         walletId: selectedWallet.id,
         destinationWalletId:
           txType === 'TRANSFER' ? destinationWallet?.id ?? null : null,
         amountMinor: evalResult.amountMinor,
         destinationAmountMinor: finalDestMinor,
-        categoryId: txType === 'TRANSFER' ? null : categoryId,
-        subcategoryId: txType === 'TRANSFER' ? null : subcategoryId,
+        snapshotRateToBase: parsedSnapshotRate,
+        categoryId:
+          txType === 'TRANSFER' || txType === 'BALANCE_ADJUSTMENT'
+            ? null
+            : categoryId,
+        subcategoryId:
+          txType === 'TRANSFER' || txType === 'BALANCE_ADJUSTMENT'
+            ? null
+            : subcategoryId,
         manualBudgetId: txType === 'EXPENSE' ? manualBudgetId : null,
         title,
         note,
+        occurredAt: fullOccurredAt,
       });
     }
 
+    refresh();
+    closeQuickEntry();
+  };
+
+  const handleDuplicate = () => {
+    if (!editingTx) {
+      return;
+    }
+    engine.duplicateTransaction(editingTx.id);
     refresh();
     closeQuickEntry();
   };
@@ -312,11 +380,8 @@ export function QuickEntryModal() {
                 {expression || '0'}
               </Text>
               <Text style={[styles.rateBadge, { color: theme.textMuted }]}>
-                {selectedWallet?.currencyCode} (Rate:{' '}
-                {engine
-                  .getExchangeRateToBase(selectedWallet?.currencyCode ?? 'USD')
-                  .toFixed(2)}
-                )
+                {selectedWallet?.currencyCode} (Snapshot Rate:{' '}
+                {parsedSnapshotRate.toFixed(4)})
               </Text>
             </View>
             <Text style={[styles.evaluatedAmountText, { color: theme.textPrimary }]}>
@@ -343,7 +408,12 @@ export function QuickEntryModal() {
                 return (
                   <Pressable
                     key={w.id}
-                    onPress={() => setWalletId(w.id)}
+                    onPress={() => {
+                      setWalletId(w.id);
+                      setSnapshotRateInput(
+                        String(engine.getExchangeRateToBase(w.currencyCode))
+                      );
+                    }}
                     style={[
                       styles.chip,
                       {
@@ -447,7 +517,7 @@ export function QuickEntryModal() {
             )}
 
             {/* Category & Subcategory Chips */}
-            {txType !== 'TRANSFER' && (
+            {txType !== 'TRANSFER' && txType !== 'BALANCE_ADJUSTMENT' && (
               <>
                 <Text style={[styles.sectionLabel, { color: theme.textSecondary }]}>
                   Category
@@ -665,6 +735,51 @@ export function QuickEntryModal() {
                 ]}
               />
             </View>
+
+            {/* Date (occurredAt) & Editable Snapshot Rate Inputs */}
+            <View style={styles.inputRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.sectionLabel, { color: theme.textSecondary }]}>
+                  Date (YYYY-MM-DD)
+                </Text>
+                <TextInput
+                  value={occurredAtInput}
+                  onChangeText={setOccurredAtInput}
+                  placeholder="YYYY-MM-DD"
+                  placeholderTextColor={theme.textMuted}
+                  style={[
+                    styles.inputField,
+                    {
+                      backgroundColor: theme.surfaceElevated,
+                      color: theme.textPrimary,
+                      borderColor: theme.border,
+                    },
+                  ]}
+                />
+              </View>
+              {selectedWallet && selectedWallet.currencyCode !== baseCurrency && (
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.sectionLabel, { color: theme.textSecondary }]}>
+                    Snapshot Rate (to {baseCurrency})
+                  </Text>
+                  <TextInput
+                    value={snapshotRateInput}
+                    onChangeText={setSnapshotRateInput}
+                    keyboardType="decimal-pad"
+                    placeholder="1.00"
+                    placeholderTextColor={theme.textMuted}
+                    style={[
+                      styles.inputField,
+                      {
+                        backgroundColor: theme.surfaceElevated,
+                        color: theme.textPrimary,
+                        borderColor: theme.border,
+                      },
+                    ]}
+                  />
+                </View>
+              )}
+            </View>
           </ScrollView>
 
           {/* Calculator Keypad */}
@@ -705,17 +820,30 @@ export function QuickEntryModal() {
           {/* Action Buttons */}
           <View style={styles.footerRow}>
             {editingTx && (
-              <Pressable
-                onPress={handleDelete}
-                style={[
-                  styles.deleteButton,
-                  { backgroundColor: theme.danger + '22' },
-                ]}
-              >
-                <Text style={[styles.deleteText, { color: theme.danger }]}>
-                  Delete
-                </Text>
-              </Pressable>
+              <>
+                <Pressable
+                  onPress={handleDelete}
+                  style={[
+                    styles.deleteButton,
+                    { backgroundColor: theme.danger + '22' },
+                  ]}
+                >
+                  <Text style={[styles.deleteText, { color: theme.danger }]}>
+                    Delete
+                  </Text>
+                </Pressable>
+                <Pressable
+                  onPress={handleDuplicate}
+                  style={[
+                    styles.deleteButton,
+                    { backgroundColor: theme.accent + '22' },
+                  ]}
+                >
+                  <Text style={[styles.deleteText, { color: theme.accent }]}>
+                    Duplicate
+                  </Text>
+                </Pressable>
+              </>
             )}
             <Pressable
               onPress={handleSave}
@@ -723,14 +851,14 @@ export function QuickEntryModal() {
                 styles.saveButton,
                 {
                   backgroundColor:
-                    BigInt(evalResult.amountMinor) > 0n
+                    BigInt(evalResult.amountMinor) !== 0n
                       ? theme.accent
                       : theme.textMuted,
                 },
               ]}
             >
               <Text style={styles.saveText}>
-                {editingTx ? 'Update Transaction' : `Save ${txType}`}
+                {editingTx ? 'Update' : `Save ${txType}`}
               </Text>
             </Pressable>
           </View>
@@ -753,7 +881,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 14,
     paddingBottom: 22,
-    maxHeight: '92%',
+    maxHeight: '94%',
   },
   headerRow: {
     flexDirection: 'row',
@@ -810,7 +938,7 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   configScroll: {
-    maxHeight: 205,
+    maxHeight: 220,
     marginBottom: 8,
   },
   sectionLabel: {
@@ -861,7 +989,7 @@ const styles = StyleSheet.create({
   },
   keyButton: {
     flex: 1,
-    height: 46,
+    height: 44,
     borderRadius: 12,
     borderWidth: 1,
     alignItems: 'center',
@@ -873,18 +1001,18 @@ const styles = StyleSheet.create({
   },
   footerRow: {
     flexDirection: 'row',
-    gap: 10,
+    gap: 8,
     marginTop: 12,
   },
   deleteButton: {
-    paddingHorizontal: 18,
+    paddingHorizontal: 14,
     paddingVertical: 14,
     borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
   },
   deleteText: {
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '700',
   },
   saveButton: {

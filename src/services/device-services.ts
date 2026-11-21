@@ -88,20 +88,44 @@ export async function scheduleUpcomingBillNotifications(
         continue;
       }
       const [y, m, d] = bill.dueDate.split('-').map(Number);
-      const dueTrigger = new Date(y, m - 1, d - bill.reminderDaysBefore, 9, 0, 0);
-      if (dueTrigger.getTime() > now) {
+      // 1. Advance reminder notification (when reminderDaysBefore > 0)
+      if (bill.reminderDaysBefore > 0) {
+        const advanceTrigger = new Date(
+          y,
+          m - 1,
+          d - bill.reminderDaysBefore,
+          9,
+          0,
+          0
+        );
+        if (advanceTrigger.getTime() > now) {
+          await Notifications.scheduleNotificationAsync({
+            content: {
+              title: `Upcoming Bill: ${bill.title}`,
+              body: `${bill.title} is due in ${bill.reminderDaysBefore} day(s) (${bill.dueDate}).`,
+              sound: 'default',
+            },
+            trigger: {
+              type: Notifications.SchedulableTriggerInputTypes.DATE,
+              date: advanceTrigger,
+              channelId: Platform.OS === 'android' ? BILL_CHANNEL_ID : undefined,
+            },
+          });
+          scheduledCount++;
+        }
+      }
+      // 2. Due-date notification on the due date itself
+      const dueDayTrigger = new Date(y, m - 1, d, 9, 0, 0);
+      if (dueDayTrigger.getTime() > now) {
         await Notifications.scheduleNotificationAsync({
           content: {
-            title: `Upcoming Bill: ${bill.title}`,
-            body:
-              bill.reminderDaysBefore === 0
-                ? `${bill.title} is due today.`
-                : `${bill.title} is due in ${bill.reminderDaysBefore} day(s) (${bill.dueDate}).`,
+            title: `Bill Due Today: ${bill.title}`,
+            body: `${bill.title} is due today (${bill.dueDate}).`,
             sound: 'default',
           },
           trigger: {
             type: Notifications.SchedulableTriggerInputTypes.DATE,
-            date: dueTrigger,
+            date: dueDayTrigger,
             channelId: Platform.OS === 'android' ? BILL_CHANNEL_ID : undefined,
           },
         });

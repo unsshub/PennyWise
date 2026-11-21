@@ -4,6 +4,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from 'react-native';
 
@@ -14,16 +15,24 @@ export default function InsightsScreen() {
     engine,
     baseCurrency,
     wallets,
+    categories,
     theme,
     formatAmount,
+    openQuickEntry,
     revision,
   } = usePennyWise();
 
   const [selectedWalletId, setSelectedWalletId] = useState<string | undefined>(
     undefined
   );
-  const [periodWindow, setPeriodWindow] = useState<'WEEK' | 'MONTH' | 'YEAR'>(
-    'MONTH'
+  const [periodWindow, setPeriodWindow] = useState<
+    'WEEK' | 'MONTH' | 'YEAR' | 'CUSTOM'
+  >('MONTH');
+  const [customStartDate, setCustomStartDate] = useState(
+    () => new Date().toISOString().slice(0, 8) + '01'
+  );
+  const [customEndDate, setCustomEndDate] = useState(
+    () => new Date().toISOString().slice(0, 10)
   );
   const [breakdownFlow, setBreakdownFlow] = useState<'EXPENSE' | 'INCOME'>(
     'EXPENSE'
@@ -32,10 +41,19 @@ export default function InsightsScreen() {
     null
   );
   const [inspectedDayIdx, setInspectedDayIdx] = useState<number | null>(null);
+  const [netWorthHorizon, setNetWorthHorizon] = useState<
+    '1M' | '3M' | '6M' | '1Y' | 'ALL'
+  >('1M');
 
   const todayStr = useMemo(() => new Date().toISOString().slice(0, 10), []);
 
   const { startDate, endDate } = useMemo(() => {
+    if (periodWindow === 'CUSTOM') {
+      return {
+        startDate: customStartDate || todayStr,
+        endDate: customEndDate || todayStr,
+      };
+    }
     const [y, m, d] = todayStr.split('-').map(Number);
     if (periodWindow === 'WEEK') {
       const endMs = Date.UTC(y, m - 1, d);
@@ -57,7 +75,7 @@ export default function InsightsScreen() {
       startDate: `${y}-${String(m).padStart(2, '0')}-01`,
       endDate: `${y}-${String(m).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`,
     };
-  }, [todayStr, periodWindow]);
+  }, [todayStr, periodWindow, customStartDate, customEndDate]);
 
   const paceComparison = useMemo(
     () =>
@@ -95,31 +113,59 @@ export default function InsightsScreen() {
     () =>
       engine.computeMonthlyCashFlowSeries({
         endMonthDate: todayStr,
-        monthsCount: 6,
+        monthsCount: periodWindow === 'YEAR' ? 12 : 6,
         walletId: selectedWalletId,
       }),
-    [engine, todayStr, selectedWalletId, revision]
+    [engine, todayStr, periodWindow, selectedWalletId, revision]
   );
 
-  const netWorthHistory = useMemo(
-    () =>
-      engine.computeNetWorthHistory({
-        endDate: todayStr,
-        pointsCount: 7,
-        stepDays: 5,
-      }),
-    [engine, todayStr, revision]
-  );
+  const netWorthHistory = useMemo(() => {
+    const stepMap: Record<'1M' | '3M' | '6M' | '1Y' | 'ALL', number> = {
+      '1M': 4,
+      '3M': 12,
+      '6M': 24,
+      '1Y': 45,
+      ALL: 60,
+    };
+    return engine.computeNetWorthHistory({
+      endDate: todayStr,
+      pointsCount: 8,
+      stepDays: stepMap[netWorthHorizon],
+      walletId: selectedWalletId,
+    });
+  }, [engine, todayStr, netWorthHorizon, selectedWalletId, revision]);
 
   const activeCategorySlice = useMemo(
     () =>
       categoryBreakdown.categories.find(
         (c) => c.categoryId === selectedCategoryId
-      ) ?? categoryBreakdown.categories[0] ?? null,
+      ) ??
+      categoryBreakdown.categories[0] ??
+      null,
     [categoryBreakdown, selectedCategoryId]
   );
 
-  // Pace Chart sampling points (up to 15 interactive columns for touch scrubbing)
+  const matchingCategoryTransactions = useMemo(() => {
+    if (!activeCategorySlice) {
+      return [];
+    }
+    return engine.queryTransactions({
+      startDate,
+      endDate,
+      walletId: selectedWalletId,
+      categoryId: activeCategorySlice.categoryId,
+      types: [breakdownFlow],
+    });
+  }, [
+    engine,
+    startDate,
+    endDate,
+    selectedWalletId,
+    activeCategorySlice,
+    breakdownFlow,
+    revision,
+  ]);
+
   const paceColumns = useMemo(() => {
     const cur = paceComparison.currentCumulativeMinorByDay;
     const prev = paceComparison.previousCumulativeMinorByDay;
@@ -163,6 +209,8 @@ export default function InsightsScreen() {
     ).toString();
   }, [cashFlowSummary.totalExpenseBaseMinor, paceComparison.referenceDayIndex]);
 
+  const biggestCategory = categoryBreakdown.categories[0] ?? null;
+
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
       <ScrollView
@@ -184,7 +232,7 @@ export default function InsightsScreen() {
               { backgroundColor: theme.surface, borderColor: theme.border },
             ]}
           >
-            {(['WEEK', 'MONTH', 'YEAR'] as const).map((pw) => {
+            {(['WEEK', 'MONTH', 'YEAR', 'CUSTOM'] as const).map((pw) => {
               const active = periodWindow === pw;
               return (
                 <Pressable
@@ -208,6 +256,39 @@ export default function InsightsScreen() {
               );
             })}
           </View>
+
+          {periodWindow === 'CUSTOM' && (
+            <View style={styles.customDateRow}>
+              <TextInput
+                value={customStartDate}
+                onChangeText={setCustomStartDate}
+                placeholder="Start YYYY-MM-DD"
+                placeholderTextColor={theme.textMuted}
+                style={[
+                  styles.customDateInput,
+                  {
+                    backgroundColor: theme.surface,
+                    color: theme.textPrimary,
+                    borderColor: theme.border,
+                  },
+                ]}
+              />
+              <TextInput
+                value={customEndDate}
+                onChangeText={setCustomEndDate}
+                placeholder="End YYYY-MM-DD"
+                placeholderTextColor={theme.textMuted}
+                style={[
+                  styles.customDateInput,
+                  {
+                    backgroundColor: theme.surface,
+                    color: theme.textPrimary,
+                    borderColor: theme.border,
+                  },
+                ]}
+              />
+            </View>
+          )}
 
           <ScrollView
             horizontal
@@ -265,7 +346,7 @@ export default function InsightsScreen() {
           </ScrollView>
         </View>
 
-        {/* Summary Metric Cards */}
+        {/* 4 Summary Metric KPI Cards: Average Daily Spend, Biggest Expense Category, Net Cash Flow, % Change vs Previous Period */}
         <View style={styles.kpiGrid}>
           <View
             style={[
@@ -274,13 +355,73 @@ export default function InsightsScreen() {
             ]}
           >
             <Text style={[styles.kpiLabel, { color: theme.textSecondary }]}>
-              Total Spent
+              Average Daily Spend
             </Text>
             <Text style={[styles.kpiValue, { color: theme.danger }]}>
-              {formatAmount(cashFlowSummary.totalExpenseBaseMinor, baseCurrency)}
+              {formatAmount(avgDailySpendMinor, baseCurrency)}
             </Text>
             <Text style={[styles.kpiSub, { color: theme.textMuted }]}>
-              Avg {formatAmount(avgDailySpendMinor, baseCurrency)}/day
+              Total: {formatAmount(cashFlowSummary.totalExpenseBaseMinor, baseCurrency)}
+            </Text>
+          </View>
+
+          <View
+            style={[
+              styles.kpiCard,
+              { backgroundColor: theme.surface, borderColor: theme.border },
+            ]}
+          >
+            <Text style={[styles.kpiLabel, { color: theme.textSecondary }]}>
+              % Change vs Prev Period
+            </Text>
+            <Text
+              style={[
+                styles.kpiValue,
+                {
+                  color:
+                    paceComparison.percentChangeAtReferenceDay > 0
+                      ? theme.warning
+                      : theme.success,
+                },
+              ]}
+            >
+              {paceComparison.percentChangeAtReferenceDay > 0 ? '+' : ''}
+              {paceComparison.percentChangeAtReferenceDay}%
+            </Text>
+            <Text style={[styles.kpiSub, { color: theme.textMuted }]}>
+              Delta:{' '}
+              {formatAmount(
+                paceComparison.deltaAtReferenceDayMinor,
+                baseCurrency,
+                undefined,
+                { showPlusSign: true }
+              )}
+            </Text>
+          </View>
+        </View>
+
+        <View style={styles.kpiGrid}>
+          <View
+            style={[
+              styles.kpiCard,
+              { backgroundColor: theme.surface, borderColor: theme.border },
+            ]}
+          >
+            <Text style={[styles.kpiLabel, { color: theme.textSecondary }]}>
+              Biggest Expense Category
+            </Text>
+            <Text
+              style={[styles.kpiValue, { color: theme.textPrimary }]}
+              numberOfLines={1}
+            >
+              {biggestCategory
+                ? `${biggestCategory.icon} ${biggestCategory.name}`
+                : 'None'}
+            </Text>
+            <Text style={[styles.kpiSub, { color: theme.textMuted }]}>
+              {biggestCategory
+                ? `${formatAmount(biggestCategory.amountMinor, baseCurrency)} (${biggestCategory.percentage}%)`
+                : 'No expenses logged'}
             </Text>
           </View>
 
@@ -317,7 +458,7 @@ export default function InsightsScreen() {
           </View>
         </View>
 
-        {/* Chart 1: Interactive Spending Pace Comparison (This Period vs Previous Period) */}
+        {/* Chart 1: Interactive Spending Pace Comparison Line Chart */}
         <View
           style={[
             styles.chartCard,
@@ -327,10 +468,10 @@ export default function InsightsScreen() {
           <View style={styles.chartHeader}>
             <View>
               <Text style={[styles.chartTitle, { color: theme.textPrimary }]}>
-                📈 Spending Pace Comparison
+                📈 Spending Pace Comparison Line Chart
               </Text>
               <Text style={[styles.chartSub, { color: theme.textSecondary }]}>
-                Cumulative expenses: This Period (solid) vs. Last Period (muted)
+                Cumulative expenses: This Period (solid line/nodes) vs. Last Period (dashed nodes)
               </Text>
             </View>
           </View>
@@ -370,28 +511,40 @@ export default function InsightsScreen() {
                     },
                   ]}
                 >
-                  <View style={styles.paceBarPair}>
-                    {/* Previous Period Bar (Muted) */}
+                  <View style={styles.paceLineTrack}>
+                    {/* Previous Period Dashed Node & Vertical Stem */}
                     <View
                       style={[
-                        styles.prevPaceBar,
+                        styles.prevLineNode,
                         {
-                          height: `${Math.max(6, col.prevHeightPct)}%`,
-                          backgroundColor: theme.textMuted + '55',
+                          bottom: `${Math.min(92, col.prevHeightPct)}%`,
+                          borderColor: theme.textMuted,
                         },
                       ]}
                     />
-                    {/* Current Period Bar (Solid Accent) */}
+                    {/* Current Period Solid Line Node & Area Fill */}
                     {col.curMinor !== null && (
-                      <View
-                        style={[
-                          styles.curPaceBar,
-                          {
-                            height: `${Math.max(6, col.curHeightPct)}%`,
-                            backgroundColor: theme.accent,
-                          },
-                        ]}
-                      />
+                      <>
+                        <View
+                          style={[
+                            styles.curAreaStem,
+                            {
+                              height: `${Math.max(6, col.curHeightPct)}%`,
+                              backgroundColor: theme.accent + '33',
+                              borderTopColor: theme.accent,
+                            },
+                          ]}
+                        />
+                        <View
+                          style={[
+                            styles.curLineNode,
+                            {
+                              bottom: `${Math.min(92, col.curHeightPct)}%`,
+                              backgroundColor: theme.accent,
+                            },
+                          ]}
+                        />
+                      </>
                     )}
                   </View>
                   <Text style={[styles.axisTick, { color: theme.textMuted }]}>
@@ -403,7 +556,7 @@ export default function InsightsScreen() {
           </View>
         </View>
 
-        {/* Chart 2: Category & Subcategory Breakdown Donut / Stacked Bar */}
+        {/* Chart 2: Category & Subcategory Breakdown Donut Chart + Underlying Transactions */}
         <View
           style={[
             styles.chartCard,
@@ -413,10 +566,10 @@ export default function InsightsScreen() {
           <View style={styles.chartHeader}>
             <View style={{ flex: 1 }}>
               <Text style={[styles.chartTitle, { color: theme.textPrimary }]}>
-                🍩 Where Your Money Goes
+                🍩 Category Breakdown Donut Chart
               </Text>
               <Text style={[styles.chartSub, { color: theme.textSecondary }]}>
-                Tap any Category slice to drill down into its Subcategories
+                Tap a Category slice to drill down into Subcategories & Transactions
               </Text>
             </View>
             <View style={styles.flowToggle}>
@@ -449,6 +602,50 @@ export default function InsightsScreen() {
                   </Text>
                 </Pressable>
               ))}
+            </View>
+          </View>
+
+          {/* Interactive Donut Ring Visual */}
+          <View style={styles.donutContainer}>
+            <View
+              style={[
+                styles.donutRingOuter,
+                {
+                  borderColor:
+                    activeCategorySlice?.color ?? theme.accent,
+                  backgroundColor: theme.surfaceElevated,
+                },
+              ]}
+            >
+              <View
+                style={[
+                  styles.donutHoleInner,
+                  { backgroundColor: theme.surface },
+                ]}
+              >
+                <Text style={{ fontSize: 22 }}>
+                  {activeCategorySlice?.icon ?? '🍩'}
+                </Text>
+                <Text
+                  style={{
+                    color: theme.textPrimary,
+                    fontWeight: '900',
+                    fontSize: 14,
+                    marginTop: 2,
+                  }}
+                  numberOfLines={1}
+                >
+                  {activeCategorySlice
+                    ? `${activeCategorySlice.percentage}%`
+                    : '0%'}
+                </Text>
+                <Text
+                  style={{ color: theme.textSecondary, fontSize: 10 }}
+                  numberOfLines={1}
+                >
+                  {activeCategorySlice?.name ?? 'Total'}
+                </Text>
+              </View>
             </View>
           </View>
 
@@ -537,8 +734,8 @@ export default function InsightsScreen() {
                       </Text>
                     </Pressable>
 
-                    {/* Subcategory Drill-Down Drawer */}
-                    {isSelected && slice.subcategories.length > 0 && (
+                    {/* Subcategory Drill-Down & Underlying Transactions */}
+                    {isSelected && (
                       <View
                         style={[
                           styles.subDrillBox,
@@ -554,7 +751,7 @@ export default function InsightsScreen() {
                               style={{
                                 color: theme.textPrimary,
                                 fontSize: 12,
-                                fontWeight: '600',
+                                fontWeight: '700',
                               }}
                             >
                               {sub.icon} {sub.name} ({sub.percentage}%)
@@ -570,6 +767,59 @@ export default function InsightsScreen() {
                             </Text>
                           </View>
                         ))}
+
+                        {matchingCategoryTransactions.length > 0 && (
+                          <View style={styles.drillTxList}>
+                            <Text
+                              style={{
+                                color: theme.textSecondary,
+                                fontSize: 10,
+                                fontWeight: '800',
+                                textTransform: 'uppercase',
+                                marginTop: 6,
+                                marginBottom: 4,
+                              }}
+                            >
+                              Transactions in {slice.name} (
+                              {matchingCategoryTransactions.length})
+                            </Text>
+                            {matchingCategoryTransactions
+                              .slice(0, 5)
+                              .map((tx) => (
+                                <Pressable
+                                  key={tx.id}
+                                  onPress={() =>
+                                    openQuickEntry({ editingTransaction: tx })
+                                  }
+                                  style={styles.drillTxRow}
+                                >
+                                  <Text
+                                    style={{
+                                      color: theme.textPrimary,
+                                      fontSize: 12,
+                                      flex: 1,
+                                    }}
+                                    numberOfLines={1}
+                                  >
+                                    {tx.occurredAt.slice(0, 10)} • {tx.title}
+                                  </Text>
+                                  <Text
+                                    style={{
+                                      color: theme.textPrimary,
+                                      fontSize: 12,
+                                      fontWeight: '700',
+                                    }}
+                                  >
+                                    {formatAmount(
+                                      tx.amountMinor,
+                                      tx.currencyCode,
+                                      tx.decimalPlaces
+                                    )}
+                                  </Text>
+                                </Pressable>
+                              ))}
+                          </View>
+                        )}
                       </View>
                     )}
                   </View>
@@ -579,7 +829,7 @@ export default function InsightsScreen() {
           )}
         </View>
 
-        {/* Chart 3: Monthly Income vs Expense Cash Flow Bar Graph */}
+        {/* Chart 3: Income vs Expense Cash Flow Bar Graph */}
         <View
           style={[
             styles.chartCard,
@@ -587,10 +837,10 @@ export default function InsightsScreen() {
           ]}
         >
           <Text style={[styles.chartTitle, { color: theme.textPrimary }]}>
-            📊 6-Month Income vs. Expense Cash Flow
+            📊 Income vs. Expense Cash Flow Bar Graph
           </Text>
           <Text style={[styles.chartSub, { color: theme.textSecondary }]}>
-            Compare monthly inflows (green) against expenses (red)
+            Compare inflows (green) against expenses (red) across consecutive periods
           </Text>
 
           <View style={styles.cashFlowBarsContainer}>
@@ -642,19 +892,95 @@ export default function InsightsScreen() {
           </View>
         </View>
 
-        {/* Chart 4: Net Worth Trajectory History */}
+        {/* Chart 4: Net Worth & Wallet Balance History Line Chart with 1M / 3M / 6M / 1Y / All Horizons */}
         <View
           style={[
             styles.chartCard,
             { backgroundColor: theme.surface, borderColor: theme.border },
           ]}
         >
-          <Text style={[styles.chartTitle, { color: theme.textPrimary }]}>
-            💎 Net Worth Trajectory ({baseCurrency})
-          </Text>
-          <Text style={[styles.chartSub, { color: theme.textSecondary }]}>
-            Historical multi-currency wealth progression over time
-          </Text>
+          <View style={styles.chartHeader}>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.chartTitle, { color: theme.textPrimary }]}>
+                💎 Net Worth & Balance History Line Chart
+              </Text>
+              <Text style={[styles.chartSub, { color: theme.textSecondary }]}>
+                Wealth trajectory over {netWorthHorizon} ({baseCurrency})
+              </Text>
+            </View>
+            <View style={styles.flowToggle}>
+              {(['1M', '3M', '6M', '1Y', 'ALL'] as const).map((h) => (
+                <Pressable
+                  key={h}
+                  onPress={() => setNetWorthHorizon(h)}
+                  style={[
+                    styles.miniToggleBtn,
+                    {
+                      backgroundColor:
+                        netWorthHorizon === h
+                          ? theme.accent
+                          : theme.surfaceElevated,
+                    },
+                  ]}
+                >
+                  <Text
+                    style={{
+                      color:
+                        netWorthHorizon === h ? '#FFFFFF' : theme.textSecondary,
+                      fontSize: 10,
+                      fontWeight: '800',
+                    }}
+                  >
+                    {h}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+          </View>
+
+          {/* Visual Line/Area Plot for Net Worth Trajectory */}
+          <View style={styles.pacePlotArea}>
+            {(() => {
+              const vals = netWorthHistory.map((p) => Number(p.netWorthMinor));
+              const maxNw = Math.max(...vals, 1);
+              const minNw = Math.min(...vals, 0);
+              const range = Math.max(1, maxNw - minNw);
+
+              return netWorthHistory.map((pt) => {
+                const pct = Math.round(
+                  ((Number(pt.netWorthMinor) - minNw) / range) * 85 + 10
+                );
+                return (
+                  <View key={pt.date} style={styles.paceColWrapper}>
+                    <View style={styles.paceLineTrack}>
+                      <View
+                        style={[
+                          styles.curAreaStem,
+                          {
+                            height: `${pct}%`,
+                            backgroundColor: theme.accent + '28',
+                            borderTopColor: theme.accent,
+                          },
+                        ]}
+                      />
+                      <View
+                        style={[
+                          styles.curLineNode,
+                          {
+                            bottom: `${Math.min(92, pct)}%`,
+                            backgroundColor: theme.accent,
+                          },
+                        ]}
+                      />
+                    </View>
+                    <Text style={[styles.axisTick, { color: theme.textMuted }]}>
+                      {pt.date.slice(5)}
+                    </Text>
+                  </View>
+                );
+              });
+            })()}
+          </View>
 
           <View style={styles.nwTimeline}>
             {netWorthHistory.map((pt) => (
@@ -714,6 +1040,19 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     alignItems: 'center',
   },
+  customDateRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 8,
+  },
+  customDateInput: {
+    flex: 1,
+    borderRadius: 10,
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    fontSize: 12,
+  },
   walletChip: {
     paddingHorizontal: 12,
     paddingVertical: 7,
@@ -724,7 +1063,7 @@ const styles = StyleSheet.create({
   kpiGrid: {
     flexDirection: 'row',
     gap: 10,
-    marginBottom: 14,
+    marginBottom: 10,
   },
   kpiCard: {
     flex: 1,
@@ -738,7 +1077,7 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
   },
   kpiValue: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: '900',
     marginVertical: 4,
   },
@@ -785,21 +1124,32 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
     paddingVertical: 4,
   },
-  paceBarPair: {
+  paceLineTrack: {
     flex: 1,
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    gap: 2,
-    width: '72%',
-    justifyContent: 'center',
+    width: '100%',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    position: 'relative',
   },
-  prevPaceBar: {
-    width: 5,
-    borderRadius: 3,
+  prevLineNode: {
+    position: 'absolute',
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    borderWidth: 2,
+    borderStyle: 'dashed',
   },
-  curPaceBar: {
-    width: 6,
-    borderRadius: 3,
+  curAreaStem: {
+    width: '70%',
+    borderTopWidth: 2.5,
+    borderTopLeftRadius: 2,
+    borderTopRightRadius: 2,
+  },
+  curLineNode: {
+    position: 'absolute',
+    width: 9,
+    height: 9,
+    borderRadius: 4.5,
   },
   axisTick: {
     fontSize: 9,
@@ -811,13 +1161,34 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   miniToggleBtn: {
-    paddingHorizontal: 10,
+    paddingHorizontal: 8,
     paddingVertical: 6,
     borderRadius: 8,
   },
+  donutContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginVertical: 10,
+  },
+  donutRingOuter: {
+    width: 126,
+    height: 126,
+    borderRadius: 63,
+    borderWidth: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  donutHoleInner: {
+    width: 92,
+    height: 92,
+    borderRadius: 46,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 6,
+  },
   distributionBar: {
-    height: 16,
-    borderRadius: 8,
+    height: 14,
+    borderRadius: 7,
     flexDirection: 'row',
     overflow: 'hidden',
     marginBottom: 12,
@@ -848,6 +1219,17 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
   },
+  drillTxList: {
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(148,163,184,0.25)',
+    marginTop: 4,
+    paddingTop: 4,
+  },
+  drillTxRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: 4,
+  },
   cashFlowBarsContainer: {
     flexDirection: 'row',
     height: 140,
@@ -868,15 +1250,15 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   incomeBar: {
-    width: 12,
+    width: 11,
     borderRadius: 4,
   },
   expenseBar: {
-    width: 12,
+    width: 11,
     borderRadius: 4,
   },
   monthLabel: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '700',
     marginTop: 6,
   },

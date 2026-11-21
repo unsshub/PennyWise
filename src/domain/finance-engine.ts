@@ -409,6 +409,18 @@ export class FinanceEngine {
       ) VALUES (?, ?, ?, ?, ?);`,
       [oldBase, upper, 1.0 / divisor, 0, nowIso]
     );
+
+    // Rebase historical transactions' snapshot_rate_to_base relative to the new Base Currency
+    // so historical transactions and budgets remain invariant in real terms (per ADR-0002)
+    const allTxs = this.listTransactions();
+    for (const tx of allTxs) {
+      const rebasedSnapshotRate =
+        tx.currencyCode === upper ? 1.0 : tx.snapshotRateToBase / divisor;
+      this.db.run(
+        'UPDATE transactions SET snapshot_rate_to_base = ? WHERE id = ?;',
+        [rebasedSnapshotRate, tx.id]
+      );
+    }
   }
 
   public listExchangeRates(): ExchangeRate[] {
@@ -791,6 +803,12 @@ export class FinanceEngine {
   public deleteCategory(id: string): void {
     this.db.run('DELETE FROM categories WHERE parent_id = ?;', [id]);
     this.db.run('DELETE FROM categories WHERE id = ?;', [id]);
+  }
+
+  public reorderCategories(orderedCategoryIds: string[]): void {
+    orderedCategoryIds.forEach((id, idx) => {
+      this.db.run('UPDATE categories SET sort_order = ? WHERE id = ?;', [idx, id]);
+    });
   }
 
   private applyTransactionBalanceEffect(tx: Transaction, direction: 1n | -1n): void {
@@ -1369,6 +1387,12 @@ export class FinanceEngine {
     this.db.run('DELETE FROM budgets WHERE id = ?;', [id]);
   }
 
+  public reorderBudgets(orderedBudgetIds: string[]): void {
+    orderedBudgetIds.forEach((id, idx) => {
+      this.db.run('UPDATE budgets SET sort_order = ? WHERE id = ?;', [idx, id]);
+    });
+  }
+
   public resolveBudgetPeriodWindow(
     budget: Budget,
     referenceDateStr: string,
@@ -1759,6 +1783,43 @@ export class FinanceEngine {
     return payment;
   }
 
+  private listStandaloneUpcomingPayments(): UpcomingPayment[] {
+    const standaloneRows = this.db.all<any>(
+      'SELECT * FROM standalone_upcoming_payments ORDER BY due_date ASC, id ASC;'
+    );
+    return standaloneRows.map((r) => ({
+      id: r.id,
+      recurringRuleId: null,
+      title: r.title,
+      type: r.type,
+      walletId: r.wallet_id,
+      categoryId: r.category_id,
+      subcategoryId: r.subcategory_id,
+      amountMinor: r.amount_minor,
+      currencyCode: r.currency_code,
+      decimalPlaces: r.decimal_places,
+      dueDate: r.due_date,
+      autoPay: Boolean(r.auto_pay),
+      reminderDaysBefore: r.reminder_days_before,
+    }));
+  }
+
+  private consumeUpcomingPaymentOccurrence(item: UpcomingPayment): void {
+    if (item.recurringRuleId) {
+      const rule = this.getRecurringRule(item.recurringRuleId);
+      if (rule) {
+        const nextDue = this.advanceRecurringDueDate(
+          rule.nextDueDate,
+          rule.frequency,
+          rule.intervalCount
+        );
+        this.updateRecurringRule(rule.id, { nextDueDate: nextDue });
+      }
+    } else {
+      this.db.run('DELETE FROM standalone_upcoming_payments WHERE id = ?;', [item.id]);
+    }
+  }
+
   public listUpcomingPayments(): UpcomingPayment[] {
     const activeRules = this.listRecurringRules({ activeOnly: true });
     const fromRules: UpcomingPayment[] = activeRules.map((rule) => ({
@@ -1777,24 +1838,7 @@ export class FinanceEngine {
       reminderDaysBefore: rule.reminderDaysBefore,
     }));
 
-    const standaloneRows = this.db.all<any>(
-      'SELECT * FROM standalone_upcoming_payments ORDER BY due_date ASC, id ASC;'
-    );
-    const fromStandalone: UpcomingPayment[] = standaloneRows.map((r) => ({
-      id: r.id,
-      recurringRuleId: null,
-      title: r.title,
-      type: r.type,
-      walletId: r.wallet_id,
-      categoryId: r.category_id,
-      subcategoryId: r.subcategory_id,
-      amountMinor: r.amount_minor,
-      currencyCode: r.currency_code,
-      decimalPlaces: r.decimal_places,
-      dueDate: r.due_date,
-      autoPay: Boolean(r.auto_pay),
-      reminderDaysBefore: r.reminder_days_before,
-    }));
+    const fromStandalone = this.listStandaloneUpcomingPayments();
 
     return [...fromRules, ...fromStandalone].sort((a, b) =>
       a.dueDate.localeCompare(b.dueDate)
@@ -1887,20 +1931,7 @@ export class FinanceEngine {
       recurringRuleId: item.recurringRuleId,
     });
 
-    if (item.recurringRuleId) {
-      const rule = this.getRecurringRule(item.recurringRuleId);
-      if (rule) {
-        const nextDue = this.advanceRecurringDueDate(
-          rule.nextDueDate,
-          rule.frequency,
-          rule.intervalCount
-        );
-        this.updateRecurringRule(rule.id, { nextDueDate: nextDue });
-      }
-    } else {
-      this.db.run('DELETE FROM standalone_upcoming_payments WHERE id = ?;', [item.id]);
-    }
-
+    this.consumeUpcomingPaymentOccurrence(item);
     return tx;
   }
 
@@ -1909,19 +1940,7 @@ export class FinanceEngine {
     if (!item) {
       return;
     }
-    if (item.recurringRuleId) {
-      const rule = this.getRecurringRule(item.recurringRuleId);
-      if (rule) {
-        const nextDue = this.advanceRecurringDueDate(
-          rule.nextDueDate,
-          rule.frequency,
-          rule.intervalCount
-        );
-        this.updateRecurringRule(rule.id, { nextDueDate: nextDue });
-      }
-    } else {
-      this.db.run('DELETE FROM standalone_upcoming_payments WHERE id = ?;', [item.id]);
-    }
+    this.consumeUpcomingPaymentOccurrence(item);
   }
 
   // =========================================================================
@@ -2158,24 +2177,29 @@ export class FinanceEngine {
     endDate: string;
     pointsCount?: number;
     stepDays?: number;
+    walletId?: string;
   }): NetWorthHistoryPoint[] {
     const endDay = params.endDate.slice(0, 10);
     const pointsCount = Math.max(2, params.pointsCount ?? 7);
     const stepDays = Math.max(1, params.stepDays ?? 5);
 
-    const currentNetWorthBig = BigInt(this.calculateNetWorthMinor());
-    const includedWalletIds = new Set(
-      this.listWallets({ includeArchived: false })
-        .filter((w) => w.includeInNetWorth)
-        .map((w) => w.id)
-    );
+    const targetWallets = params.walletId
+      ? this.listWallets({ includeArchived: true }).filter((w) => w.id === params.walletId)
+      : this.listWallets({ includeArchived: false }).filter((w) => w.includeInNetWorth);
 
+    const includedWalletIds = new Set(targetWallets.map((w) => w.id));
+    let currentTotalBig = 0n;
+    for (const w of targetWallets) {
+      currentTotalBig += BigInt(this.convertWalletBalanceToBaseMinor(w));
+    }
+
+    const base = this.getBaseCurrency();
+    const baseDef = getCurrencyDefinition(base);
     const allTxs = this.listTransactions();
     const points: NetWorthHistoryPoint[] = [];
 
     for (let i = pointsCount - 1; i >= 0; i--) {
       const pointDate = addDaysUtc(endDay, -i * stepDays);
-      // Reconstruct Net Worth at pointDate by subtracting net inflows that occurred strictly after pointDate
       let deltaAfterPoint = 0n;
       for (const tx of allTxs) {
         const txDate = tx.occurredAt.slice(0, 10);
@@ -2189,16 +2213,59 @@ export class FinanceEngine {
           includedWalletIds.has(tx.walletId)
         ) {
           deltaAfterPoint += BigInt(this.convertTransactionToBaseMinor(tx));
+        } else if (tx.type === 'TRANSFER') {
+          const srcIncluded = includedWalletIds.has(tx.walletId);
+          const dstIncluded =
+            tx.destinationWalletId !== null &&
+            includedWalletIds.has(tx.destinationWalletId);
+          if (srcIncluded && !dstIncluded) {
+            deltaAfterPoint -= BigInt(this.convertTransactionToBaseMinor(tx));
+          } else if (!srcIncluded && dstIncluded && tx.destinationWalletId) {
+            const dstWallet = this.getWallet(tx.destinationWalletId);
+            const dstRate = dstWallet
+              ? this.getExchangeRateToBase(dstWallet.currencyCode)
+              : 1;
+            const dstInBase = dstWallet
+              ? convertMinorUnits(
+                  tx.destinationAmountMinor ?? tx.amountMinor,
+                  dstWallet.decimalPlaces,
+                  baseDef.decimalPlaces,
+                  dstRate
+                )
+              : this.convertTransactionToBaseMinor(tx);
+            deltaAfterPoint += BigInt(dstInBase);
+          }
         }
       }
 
       points.push({
         date: pointDate,
-        netWorthMinor: (currentNetWorthBig - deltaAfterPoint).toString(),
+        netWorthMinor: (currentTotalBig - deltaAfterPoint).toString(),
       });
     }
 
     return points;
+  }
+
+  public duplicateTransaction(id: string, occurredAt?: string): Transaction {
+    const existing = this.getTransaction(id);
+    if (!existing) {
+      throw new Error(`Transaction not found: ${id}`);
+    }
+    return this.recordTransaction({
+      type: existing.type,
+      walletId: existing.walletId,
+      destinationWalletId: existing.destinationWalletId,
+      amountMinor: existing.amountMinor,
+      destinationAmountMinor: existing.destinationAmountMinor,
+      snapshotRateToBase: existing.snapshotRateToBase,
+      categoryId: existing.categoryId,
+      subcategoryId: existing.subcategoryId,
+      manualBudgetId: existing.manualBudgetId,
+      title: existing.title,
+      note: existing.note,
+      occurredAt: occurredAt ?? new Date().toISOString(),
+    });
   }
 
   // =========================================================================
@@ -2249,6 +2316,7 @@ export class FinanceEngine {
       accentColor: '#10B981',
       privacyMaskEnabled: false,
       biometricLockEnabled: false,
+      hasCompletedOnboarding: false,
     };
     if (!row) {
       return defaults;
@@ -2332,24 +2400,7 @@ export class FinanceEngine {
   }
 
   public exportBackupSnapshotJson(): string {
-    const standaloneRows = this.db.all<any>(
-      'SELECT * FROM standalone_upcoming_payments ORDER BY due_date ASC, id ASC;'
-    );
-    const standaloneUpcomingPayments: UpcomingPayment[] = standaloneRows.map((r) => ({
-      id: r.id,
-      recurringRuleId: null,
-      title: r.title,
-      type: r.type,
-      walletId: r.wallet_id,
-      categoryId: r.category_id,
-      subcategoryId: r.subcategory_id,
-      amountMinor: r.amount_minor,
-      currencyCode: r.currency_code,
-      decimalPlaces: r.decimal_places,
-      dueDate: r.due_date,
-      autoPay: Boolean(r.auto_pay),
-      reminderDaysBefore: r.reminder_days_before,
-    }));
+    const standaloneUpcomingPayments = this.listStandaloneUpcomingPayments();
 
     const snapshot: BackupSnapshot = {
       version: 1,

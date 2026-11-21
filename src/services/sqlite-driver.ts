@@ -92,6 +92,9 @@ class WebMemorySQLiteFallbackEngine {
         } else if (norm.startsWith('INSERT INTO categories')) {
           const [id, parent_id, name, flow_type, color, icon, sort_order] = params;
           self.tables.categories.push({ id, parent_id, name, flow_type, color, icon, sort_order });
+        } else if (norm.startsWith('UPDATE categories SET sort_order = ? WHERE id = ?')) {
+          const [sort_order, id] = params;
+          self.tables.categories = self.tables.categories.map((c) => (c.id === id ? { ...c, sort_order } : c));
         } else if (norm.startsWith('UPDATE categories SET')) {
           const [name, color, icon, flow_type, id] = params;
           self.tables.categories = self.tables.categories.map((c) => (c.id === id ? { ...c, name, color, icon, flow_type } : c));
@@ -102,6 +105,9 @@ class WebMemorySQLiteFallbackEngine {
         } else if (norm.startsWith('INSERT INTO transactions')) {
           const [id, type, wallet_id, destination_wallet_id, amount_minor, destination_amount_minor, currency_code, decimal_places, snapshot_rate_to_base, category_id, subcategory_id, manual_budget_id, title, note, occurred_at, recurring_rule_id] = params;
           self.tables.transactions.push({ id, type, wallet_id, destination_wallet_id, amount_minor, destination_amount_minor, currency_code, decimal_places, snapshot_rate_to_base, category_id, subcategory_id, manual_budget_id, title, note, occurred_at, recurring_rule_id });
+        } else if (norm.startsWith('UPDATE transactions SET snapshot_rate_to_base = ? WHERE id = ?')) {
+          const [snapshot_rate_to_base, id] = params;
+          self.tables.transactions = self.tables.transactions.map((t) => (t.id === id ? { ...t, snapshot_rate_to_base } : t));
         } else if (norm.startsWith('UPDATE transactions SET')) {
           const [wallet_id, destination_wallet_id, amount_minor, destination_amount_minor, currency_code, decimal_places, snapshot_rate_to_base, category_id, subcategory_id, manual_budget_id, title, note, occurred_at, id] = params;
           self.tables.transactions = self.tables.transactions.map((t) =>
@@ -114,6 +120,9 @@ class WebMemorySQLiteFallbackEngine {
         } else if (norm.startsWith('INSERT INTO budgets')) {
           const [id, name, limit_amount_minor, currency_code, decimal_places, period_type, interval_count, interval_unit, anchor_date, end_date, scope_type, filter_category_ids_json, filter_wallet_ids_json, color, icon, is_pinned_to_home, sort_order] = params;
           self.tables.budgets.push({ id, name, limit_amount_minor, currency_code, decimal_places, period_type, interval_count, interval_unit, anchor_date, end_date, scope_type, filter_category_ids_json, filter_wallet_ids_json, color, icon, is_pinned_to_home, sort_order });
+        } else if (norm.startsWith('UPDATE budgets SET sort_order = ? WHERE id = ?')) {
+          const [sort_order, id] = params;
+          self.tables.budgets = self.tables.budgets.map((b) => (b.id === id ? { ...b, sort_order } : b));
         } else if (norm.startsWith('UPDATE budgets SET')) {
           const [name, limit_amount_minor, currency_code, decimal_places, period_type, interval_count, interval_unit, anchor_date, end_date, scope_type, filter_category_ids_json, filter_wallet_ids_json, color, icon, is_pinned_to_home, id] = params;
           self.tables.budgets = self.tables.budgets.map((b) =>

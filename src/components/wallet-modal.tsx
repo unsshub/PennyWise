@@ -36,7 +36,7 @@ export function WalletModal({
   editingWallet: Wallet | null;
   onClose: () => void;
 }) {
-  const { engine, theme, refresh } = usePennyWise();
+  const { engine, allWalletsIncludingArchived, theme, refresh } = usePennyWise();
 
   const [name, setName] = useState('');
   const [currencyCode, setCurrencyCode] = useState('USD');
@@ -44,6 +44,7 @@ export function WalletModal({
   const [color, setColor] = useState('#10B981');
   const [icon, setIcon] = useState('💵');
   const [includeInNetWorth, setIncludeInNetWorth] = useState(true);
+  const [isArchived, setIsArchived] = useState(false);
 
   useEffect(() => {
     if (!visible) {
@@ -60,6 +61,7 @@ export function WalletModal({
       setColor(editingWallet.color);
       setIcon(editingWallet.icon);
       setIncludeInNetWorth(editingWallet.includeInNetWorth);
+      setIsArchived(editingWallet.isArchived);
     } else {
       setName('');
       setCurrencyCode('USD');
@@ -67,8 +69,27 @@ export function WalletModal({
       setColor('#3B82F6');
       setIcon('🏦');
       setIncludeInNetWorth(true);
+      setIsArchived(false);
     }
   }, [visible, editingWallet]);
+
+  const handleMoveWallet = (direction: -1 | 1) => {
+    if (!editingWallet) {
+      return;
+    }
+    const ids = allWalletsIncludingArchived.map((w) => w.id);
+    const idx = ids.indexOf(editingWallet.id);
+    const targetIdx = idx + direction;
+    if (idx < 0 || targetIdx < 0 || targetIdx >= ids.length) {
+      return;
+    }
+    const copy = [...ids];
+    const tmp = copy[idx];
+    copy[idx] = copy[targetIdx];
+    copy[targetIdx] = tmp;
+    engine.reorderWallets(copy);
+    refresh();
+  };
 
   const handleSave = () => {
     const currDef =
@@ -87,6 +108,7 @@ export function WalletModal({
         color,
         icon,
         includeInNetWorth,
+        isArchived,
       });
       if (targetMinor !== editingWallet.currentBalanceMinor) {
         engine.reconcileWalletBalance(
@@ -269,6 +291,56 @@ export function WalletModal({
                 trackColor={{ false: theme.border, true: theme.accent }}
               />
             </View>
+
+            {editingWallet && (
+              <>
+                <View style={styles.switchRow}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.switchTitle, { color: theme.textPrimary }]}>
+                      Archive Wallet
+                    </Text>
+                    <Text style={[styles.switchSub, { color: theme.textSecondary }]}>
+                      Hide from active Wallets Carousel while preserving history
+                    </Text>
+                  </View>
+                  <Switch
+                    value={isArchived}
+                    onValueChange={setIsArchived}
+                    trackColor={{ false: theme.border, true: theme.accent }}
+                  />
+                </View>
+
+                <View style={styles.reorderRow}>
+                  <Text style={[styles.switchTitle, { color: theme.textPrimary }]}>
+                    Carousel Display Order
+                  </Text>
+                  <View style={{ flexDirection: 'row', gap: 8 }}>
+                    <Pressable
+                      onPress={() => handleMoveWallet(-1)}
+                      style={[
+                        styles.orderBtn,
+                        { backgroundColor: theme.surfaceElevated },
+                      ]}
+                    >
+                      <Text style={{ color: theme.textPrimary, fontWeight: '800' }}>
+                        ← Move Earlier
+                      </Text>
+                    </Pressable>
+                    <Pressable
+                      onPress={() => handleMoveWallet(1)}
+                      style={[
+                        styles.orderBtn,
+                        { backgroundColor: theme.surfaceElevated },
+                      ]}
+                    >
+                      <Text style={{ color: theme.textPrimary, fontWeight: '800' }}>
+                        Move Later →
+                      </Text>
+                    </Pressable>
+                  </View>
+                </View>
+              </>
+            )}
           </ScrollView>
 
           <View style={styles.footerRow}>
@@ -306,7 +378,7 @@ const styles = StyleSheet.create({
     borderRadius: 22,
     borderWidth: 1,
     padding: 18,
-    maxHeight: '88%',
+    maxHeight: '90%',
   },
   headerRow: {
     flexDirection: 'row',
@@ -367,15 +439,26 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    marginTop: 12,
+  },
+  reorderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     marginTop: 14,
-    marginBottom: 8,
+    marginBottom: 6,
+  },
+  orderBtn: {
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 10,
   },
   switchTitle: {
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '700',
   },
   switchSub: {
-    fontSize: 12,
+    fontSize: 11,
     marginTop: 2,
   },
   footerRow: {

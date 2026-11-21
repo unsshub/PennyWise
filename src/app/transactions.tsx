@@ -10,7 +10,20 @@ import {
 } from 'react-native';
 
 import { usePennyWise } from '@/context/pennywise-context';
-import type { Transaction, TransactionType } from '@/domain/types';
+import type { Category, Transaction, TransactionType } from '@/domain/types';
+import { shareExportedContent } from '@/services/device-services';
+
+const CATEGORY_COLORS = [
+  '#F97316',
+  '#3B82F6',
+  '#8B5CF6',
+  '#EC4899',
+  '#EAB308',
+  '#14B8A6',
+  '#10B981',
+  '#06B6D4',
+  '#EF4444',
+];
 
 export default function TransactionsScreen() {
   const {
@@ -26,40 +39,56 @@ export default function TransactionsScreen() {
   } = usePennyWise();
 
   const [searchQuery, setSearchQuery] = useState('');
+  const [startDateFilter, setStartDateFilter] = useState('');
+  const [endDateFilter, setEndDateFilter] = useState('');
   const [selectedWalletId, setSelectedWalletId] = useState<string | undefined>(
     undefined
   );
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | undefined>(
     undefined
   );
+  const [selectedSubcategoryId, setSelectedSubcategoryId] = useState<
+    string | undefined
+  >(undefined);
   const [selectedType, setSelectedType] = useState<TransactionType | undefined>(
     undefined
   );
+
+  // Category CRUD & Reorder Modal state
   const [catModalOpen, setCatModalOpen] = useState(false);
+  const [editingCat, setEditingCat] = useState<Category | null>(null);
   const [newCatName, setNewCatName] = useState('');
   const [newCatIcon, setNewCatIcon] = useState('🛍️');
+  const [newCatColor, setNewCatColor] = useState('#F97316');
   const [newCatFlow, setNewCatFlow] = useState<'EXPENSE' | 'INCOME'>('EXPENSE');
   const [newCatParentId, setNewCatParentId] = useState<string | null>(null);
 
-  const filteredTransactions = useMemo(
-    () =>
-      engine.queryTransactions({
-        searchQuery,
-        walletId: selectedWalletId,
-        categoryId: selectedCategoryId,
-        types: selectedType ? [selectedType] : undefined,
-      }),
-    [
-      engine,
+  const currentQueryFilters = useMemo(
+    () => ({
       searchQuery,
+      startDate: startDateFilter.trim() || undefined,
+      endDate: endDateFilter.trim() || undefined,
+      walletId: selectedWalletId,
+      categoryId: selectedCategoryId,
+      subcategoryId: selectedSubcategoryId,
+      types: selectedType ? [selectedType] : undefined,
+    }),
+    [
+      searchQuery,
+      startDateFilter,
+      endDateFilter,
       selectedWalletId,
       selectedCategoryId,
+      selectedSubcategoryId,
       selectedType,
-      revision,
     ]
   );
 
-  // Group transactions by YYYY-MM-DD
+  const filteredTransactions = useMemo(
+    () => engine.queryTransactions(currentQueryFilters),
+    [engine, currentQueryFilters, revision]
+  );
+
   const groupedByDay = useMemo(() => {
     const groups = new Map<
       string,
@@ -90,20 +119,62 @@ export default function TransactionsScreen() {
     [categories]
   );
 
-  const handleCreateCategory = () => {
+  const activeCategorySubcategories = useMemo(
+    () =>
+      selectedCategoryId
+        ? categories.filter((c) => c.parentId === selectedCategoryId)
+        : [],
+    [categories, selectedCategoryId]
+  );
+
+  const handleSaveCategory = () => {
     if (!newCatName.trim()) {
       return;
     }
-    engine.createCategory({
-      parentId: newCatParentId,
-      name: newCatName.trim(),
-      flowType: newCatFlow,
-      icon: newCatIcon || '🏷️',
-      color: newCatFlow === 'INCOME' ? '#10B981' : '#F97316',
-    });
+    if (editingCat) {
+      engine.updateCategory(editingCat.id, {
+        name: newCatName.trim(),
+        icon: newCatIcon || '🏷️',
+        color: newCatColor,
+        flowType: newCatFlow,
+      });
+      setEditingCat(null);
+    } else {
+      engine.createCategory({
+        parentId: newCatParentId,
+        name: newCatName.trim(),
+        flowType: newCatFlow,
+        icon: newCatIcon || '🏷️',
+        color: newCatColor,
+      });
+    }
     setNewCatName('');
     setNewCatParentId(null);
     refresh();
+  };
+
+  const handleMoveCategory = (catId: string, direction: -1 | 1) => {
+    const ids = topCategories.map((c) => c.id);
+    const idx = ids.indexOf(catId);
+    const targetIdx = idx + direction;
+    if (idx < 0 || targetIdx < 0 || targetIdx >= ids.length) {
+      return;
+    }
+    const copy = [...ids];
+    const tmp = copy[idx];
+    copy[idx] = copy[targetIdx];
+    copy[targetIdx] = tmp;
+    engine.reorderCategories(copy);
+    refresh();
+  };
+
+  const handleExportFilteredCsv = async () => {
+    const csv = engine.exportTransactionsToCsv(currentQueryFilters);
+    await shareExportedContent({
+      filename: `pennywise-filtered-transactions-${new Date().toISOString().slice(0, 10)}.csv`,
+      content: csv,
+      mimeType: 'text/csv',
+    });
   };
 
   return (
@@ -121,17 +192,34 @@ export default function TransactionsScreen() {
               {filteredTransactions.length} matching records
             </Text>
           </View>
-          <Pressable
-            onPress={() => setCatModalOpen(true)}
-            style={[
-              styles.manageCatsBtn,
-              { backgroundColor: theme.surface, borderColor: theme.border },
-            ]}
-          >
-            <Text style={{ color: theme.accent, fontWeight: '700', fontSize: 13 }}>
-              🏷️ Categories
-            </Text>
-          </Pressable>
+          <View style={{ flexDirection: 'row', gap: 8 }}>
+            <Pressable
+              onPress={handleExportFilteredCsv}
+              style={[
+                styles.manageCatsBtn,
+                { backgroundColor: theme.surface, borderColor: theme.border },
+              ]}
+            >
+              <Text style={{ color: theme.textPrimary, fontWeight: '700', fontSize: 12 }}>
+                📄 CSV
+              </Text>
+            </Pressable>
+            <Pressable
+              onPress={() => {
+                setEditingCat(null);
+                setNewCatName('');
+                setCatModalOpen(true);
+              }}
+              style={[
+                styles.manageCatsBtn,
+                { backgroundColor: theme.surface, borderColor: theme.border },
+              ]}
+            >
+              <Text style={{ color: theme.accent, fontWeight: '700', fontSize: 12 }}>
+                🏷️ Categories
+              </Text>
+            </Pressable>
+          </View>
         </View>
 
         {/* Search Input */}
@@ -149,6 +237,54 @@ export default function TransactionsScreen() {
             },
           ]}
         />
+
+        {/* Date Range Filter Inputs */}
+        <View style={styles.dateFilterRow}>
+          <TextInput
+            value={startDateFilter}
+            onChangeText={setStartDateFilter}
+            placeholder="From (YYYY-MM-DD)"
+            placeholderTextColor={theme.textMuted}
+            style={[
+              styles.dateFilterInput,
+              {
+                backgroundColor: theme.surface,
+                color: theme.textPrimary,
+                borderColor: theme.border,
+              },
+            ]}
+          />
+          <TextInput
+            value={endDateFilter}
+            onChangeText={setEndDateFilter}
+            placeholder="To (YYYY-MM-DD)"
+            placeholderTextColor={theme.textMuted}
+            style={[
+              styles.dateFilterInput,
+              {
+                backgroundColor: theme.surface,
+                color: theme.textPrimary,
+                borderColor: theme.border,
+              },
+            ]}
+          />
+          {(startDateFilter || endDateFilter) && (
+            <Pressable
+              onPress={() => {
+                setStartDateFilter('');
+                setEndDateFilter('');
+              }}
+              style={[
+                styles.clearDateBtn,
+                { backgroundColor: theme.surfaceElevated },
+              ]}
+            >
+              <Text style={{ color: theme.textSecondary, fontSize: 12 }}>
+                Clear
+              </Text>
+            </Pressable>
+          )}
+        </View>
 
         {/* Type Filter Chips */}
         <ScrollView
@@ -199,23 +335,36 @@ export default function TransactionsScreen() {
           style={styles.filterRow}
         >
           <Pressable
-            onPress={() => setSelectedWalletId(undefined)}
+            onPress={() => {
+              setSelectedWalletId(undefined);
+              setSelectedCategoryId(undefined);
+              setSelectedSubcategoryId(undefined);
+            }}
             style={[
               styles.filterChip,
               {
-                backgroundColor: !selectedWalletId ? theme.accent : theme.surface,
-                borderColor: !selectedWalletId ? theme.accent : theme.border,
+                backgroundColor:
+                  !selectedWalletId && !selectedCategoryId
+                    ? theme.accent
+                    : theme.surface,
+                borderColor:
+                  !selectedWalletId && !selectedCategoryId
+                    ? theme.accent
+                    : theme.border,
               },
             ]}
           >
             <Text
               style={{
-                color: !selectedWalletId ? '#FFFFFF' : theme.textSecondary,
+                color:
+                  !selectedWalletId && !selectedCategoryId
+                    ? '#FFFFFF'
+                    : theme.textSecondary,
                 fontSize: 12,
                 fontWeight: '700',
               }}
             >
-              All Wallets
+              All Wallets & Categories
             </Text>
           </Pressable>
           {wallets.map((w) => {
@@ -250,7 +399,10 @@ export default function TransactionsScreen() {
             return (
               <Pressable
                 key={cat.id}
-                onPress={() => setSelectedCategoryId(active ? undefined : cat.id)}
+                onPress={() => {
+                  setSelectedCategoryId(active ? undefined : cat.id);
+                  setSelectedSubcategoryId(undefined);
+                }}
                 style={[
                   styles.filterChip,
                   {
@@ -272,6 +424,68 @@ export default function TransactionsScreen() {
             );
           })}
         </ScrollView>
+
+        {/* Subcategory Filter Chips when a Category is selected */}
+        {activeCategorySubcategories.length > 0 && (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.filterRow}
+          >
+            <Pressable
+              onPress={() => setSelectedSubcategoryId(undefined)}
+              style={[
+                styles.filterChip,
+                {
+                  backgroundColor: !selectedSubcategoryId
+                    ? theme.accent
+                    : theme.surface,
+                  borderColor: theme.border,
+                },
+              ]}
+            >
+              <Text
+                style={{
+                  color: !selectedSubcategoryId
+                    ? '#FFFFFF'
+                    : theme.textSecondary,
+                  fontSize: 11,
+                  fontWeight: '700',
+                }}
+              >
+                All Subcategories
+              </Text>
+            </Pressable>
+            {activeCategorySubcategories.map((sub) => {
+              const active = selectedSubcategoryId === sub.id;
+              return (
+                <Pressable
+                  key={sub.id}
+                  onPress={() =>
+                    setSelectedSubcategoryId(active ? undefined : sub.id)
+                  }
+                  style={[
+                    styles.filterChip,
+                    {
+                      backgroundColor: active ? sub.color : theme.surface,
+                      borderColor: active ? sub.color : theme.border,
+                    },
+                  ]}
+                >
+                  <Text
+                    style={{
+                      color: active ? '#FFFFFF' : theme.textPrimary,
+                      fontSize: 11,
+                      fontWeight: '700',
+                    }}
+                  >
+                    {sub.icon} {sub.name}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+        )}
 
         {/* Date-Grouped Chronological Log */}
         {groupedByDay.length === 0 ? (
@@ -427,7 +641,7 @@ export default function TransactionsScreen() {
         )}
       </ScrollView>
 
-      {/* Categories & Subcategories Manager Modal */}
+      {/* Categories & Subcategories Manager Modal (Create, Edit, Delete, Reorder, Color Picker) */}
       <Modal
         visible={catModalOpen}
         animationType="slide"
@@ -443,7 +657,9 @@ export default function TransactionsScreen() {
           >
             <View style={styles.headerRow}>
               <Text style={[styles.modalTitle, { color: theme.textPrimary }]}>
-                Categories & Subcategories
+                {editingCat
+                  ? `Edit ${editingCat.name}`
+                  : 'Categories & Subcategories'}
               </Text>
               <Pressable onPress={() => setCatModalOpen(false)}>
                 <Text style={{ color: theme.textSecondary, fontSize: 18 }}>✕</Text>
@@ -480,64 +696,88 @@ export default function TransactionsScreen() {
                 ))}
               </View>
 
+              {!editingCat && (
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  style={{ marginVertical: 6 }}
+                >
+                  <Pressable
+                    onPress={() => setNewCatParentId(null)}
+                    style={[
+                      styles.filterChip,
+                      {
+                        backgroundColor:
+                          newCatParentId === null
+                            ? theme.accent
+                            : theme.surfaceElevated,
+                        borderColor: theme.border,
+                      },
+                    ]}
+                  >
+                    <Text
+                      style={{
+                        color:
+                          newCatParentId === null ? '#FFFFFF' : theme.textSecondary,
+                        fontSize: 12,
+                        fontWeight: '700',
+                      }}
+                    >
+                      Top-Level Category
+                    </Text>
+                  </Pressable>
+                  {topCategories
+                    .filter((c) => c.flowType === newCatFlow)
+                    .map((c) => (
+                      <Pressable
+                        key={c.id}
+                        onPress={() => setNewCatParentId(c.id)}
+                        style={[
+                          styles.filterChip,
+                          {
+                            backgroundColor:
+                              newCatParentId === c.id
+                                ? c.color
+                                : theme.surfaceElevated,
+                            borderColor: theme.border,
+                          },
+                        ]}
+                      >
+                        <Text
+                          style={{
+                            color:
+                              newCatParentId === c.id ? '#FFFFFF' : theme.textPrimary,
+                            fontSize: 12,
+                            fontWeight: '700',
+                          }}
+                        >
+                          Sub of {c.icon} {c.name}
+                        </Text>
+                      </Pressable>
+                    ))}
+                </ScrollView>
+              )}
+
+              {/* Category Color Swatch Picker */}
               <ScrollView
                 horizontal
                 showsHorizontalScrollIndicator={false}
                 style={{ marginVertical: 6 }}
               >
-                <Pressable
-                  onPress={() => setNewCatParentId(null)}
-                  style={[
-                    styles.filterChip,
-                    {
-                      backgroundColor:
-                        newCatParentId === null
-                          ? theme.accent
-                          : theme.surfaceElevated,
-                      borderColor: theme.border,
-                    },
-                  ]}
-                >
-                  <Text
-                    style={{
-                      color:
-                        newCatParentId === null ? '#FFFFFF' : theme.textSecondary,
-                      fontSize: 12,
-                      fontWeight: '700',
-                    }}
-                  >
-                    Top-Level Category
-                  </Text>
-                </Pressable>
-                {topCategories
-                  .filter((c) => c.flowType === newCatFlow)
-                  .map((c) => (
-                    <Pressable
-                      key={c.id}
-                      onPress={() => setNewCatParentId(c.id)}
-                      style={[
-                        styles.filterChip,
-                        {
-                          backgroundColor:
-                            newCatParentId === c.id
-                              ? c.color
-                              : theme.surfaceElevated,
-                          borderColor: theme.border,
-                        },
-                      ]}
-                    >
-                      <Text
-                        style={{
-                          color:
-                            newCatParentId === c.id ? '#FFFFFF' : theme.textPrimary,
-                          fontSize: 12,
-                          fontWeight: '700',
-                        }}
-                      >
-                        Sub of {c.icon} {c.name}
-                      </Text>
-                    </Pressable>
-                  ))}
+                {CATEGORY_COLORS.map((col) => (
+                  <Pressable
+                    key={col}
+                    onPress={() => setNewCatColor(col)}
+                    style={[
+                      styles.colorDot,
+                      {
+                        backgroundColor: col,
+                        borderWidth: newCatColor === col ? 3 : 0,
+                        borderColor: theme.textPrimary,
+                      },
+                    ]}
+                  />
+                ))}
               </ScrollView>
 
               <View style={styles.addInputRow}>
@@ -557,9 +797,11 @@ export default function TransactionsScreen() {
                   value={newCatName}
                   onChangeText={setNewCatName}
                   placeholder={
-                    newCatParentId
-                      ? 'New Subcategory name...'
-                      : 'New Category name...'
+                    editingCat
+                      ? 'Update name...'
+                      : newCatParentId
+                        ? 'New Subcategory name...'
+                        : 'New Category name...'
                   }
                   placeholderTextColor={theme.textMuted}
                   style={[
@@ -572,15 +814,17 @@ export default function TransactionsScreen() {
                   ]}
                 />
                 <Pressable
-                  onPress={handleCreateCategory}
+                  onPress={handleSaveCategory}
                   style={[styles.addBtn, { backgroundColor: theme.accent }]}
                 >
-                  <Text style={{ color: '#FFFFFF', fontWeight: '800' }}>Add</Text>
+                  <Text style={{ color: '#FFFFFF', fontWeight: '800' }}>
+                    {editingCat ? 'Save' : 'Add'}
+                  </Text>
                 </Pressable>
               </View>
             </View>
 
-            <ScrollView style={{ maxHeight: 330 }}>
+            <ScrollView style={{ maxHeight: 310 }}>
               {topCategories.map((cat) => {
                 const subs = categories.filter((s) => s.parentId === cat.id);
                 return (
@@ -589,18 +833,70 @@ export default function TransactionsScreen() {
                     style={[styles.catTreeItem, { borderColor: theme.border }]}
                   >
                     <View style={styles.catTreeHeader}>
-                      <Text style={{ color: theme.textPrimary, fontWeight: '800' }}>
-                        {cat.icon} {cat.name}{' '}
-                        <Text style={{ color: theme.textMuted, fontSize: 11 }}>
-                          ({cat.flowType})
+                      <Pressable
+                        onPress={() => {
+                          setEditingCat(cat);
+                          setNewCatName(cat.name);
+                          setNewCatIcon(cat.icon);
+                          setNewCatColor(cat.color);
+                          setNewCatFlow(cat.flowType);
+                        }}
+                        style={{ flex: 1 }}
+                      >
+                        <Text style={{ color: theme.textPrimary, fontWeight: '800' }}>
+                          {cat.icon} {cat.name}{' '}
+                          <Text style={{ color: cat.color, fontSize: 11 }}>
+                            ● ({cat.flowType}) ✎
+                          </Text>
                         </Text>
-                      </Text>
+                      </Pressable>
+                      <View style={{ flexDirection: 'row', gap: 6 }}>
+                        <Pressable
+                          onPress={() => handleMoveCategory(cat.id, -1)}
+                          style={[
+                            styles.miniAction,
+                            { backgroundColor: theme.surfaceElevated },
+                          ]}
+                        >
+                          <Text style={{ color: theme.textPrimary }}>↑</Text>
+                        </Pressable>
+                        <Pressable
+                          onPress={() => handleMoveCategory(cat.id, 1)}
+                          style={[
+                            styles.miniAction,
+                            { backgroundColor: theme.surfaceElevated },
+                          ]}
+                        >
+                          <Text style={{ color: theme.textPrimary }}>↓</Text>
+                        </Pressable>
+                        <Pressable
+                          onPress={() => {
+                            engine.deleteCategory(cat.id);
+                            refresh();
+                          }}
+                          style={[
+                            styles.miniAction,
+                            { backgroundColor: theme.danger + '22' },
+                          ]}
+                        >
+                          <Text style={{ color: theme.danger, fontSize: 11 }}>
+                            🗑
+                          </Text>
+                        </Pressable>
+                      </View>
                     </View>
                     {subs.length > 0 && (
                       <View style={styles.subWrap}>
                         {subs.map((sub) => (
-                          <View
+                          <Pressable
                             key={sub.id}
+                            onPress={() => {
+                              setEditingCat(sub);
+                              setNewCatName(sub.name);
+                              setNewCatIcon(sub.icon);
+                              setNewCatColor(sub.color);
+                              setNewCatFlow(sub.flowType);
+                            }}
                             style={[
                               styles.subBadge,
                               { backgroundColor: theme.surfaceElevated },
@@ -609,9 +905,9 @@ export default function TransactionsScreen() {
                             <Text
                               style={{ color: theme.textSecondary, fontSize: 12 }}
                             >
-                              {sub.icon} {sub.name}
+                              {sub.icon} {sub.name} ✎
                             </Text>
-                          </View>
+                          </Pressable>
                         ))}
                       </View>
                     )}
@@ -648,7 +944,7 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   manageCatsBtn: {
-    paddingHorizontal: 12,
+    paddingHorizontal: 11,
     paddingVertical: 8,
     borderRadius: 12,
     borderWidth: 1,
@@ -659,7 +955,25 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 10,
     fontSize: 14,
-    marginBottom: 10,
+    marginBottom: 8,
+  },
+  dateFilterRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 8,
+  },
+  dateFilterInput: {
+    flex: 1,
+    borderRadius: 12,
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    fontSize: 12,
+  },
+  clearDateBtn: {
+    paddingHorizontal: 10,
+    borderRadius: 10,
+    justifyContent: 'center',
   },
   filterRow: {
     flexDirection: 'row',
@@ -767,6 +1081,12 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     alignItems: 'center',
   },
+  colorDot: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    marginRight: 8,
+  },
   addInputRow: {
     flexDirection: 'row',
     gap: 8,
@@ -799,6 +1119,14 @@ const styles = StyleSheet.create({
   catTreeHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  miniAction: {
+    width: 26,
+    height: 26,
+    borderRadius: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   subWrap: {
     flexDirection: 'row',

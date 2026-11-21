@@ -12,7 +12,8 @@ export interface CalculatorEvaluationResult {
  */
 export function evaluateCalculatorExpression(
   expression: string,
-  decimalPlaces: number
+  decimalPlaces: number,
+  options?: { allowNegative?: boolean }
 ): CalculatorEvaluationResult {
   const normalized = expression
     .replace(/×/g, '*')
@@ -24,20 +25,42 @@ export function evaluateCalculatorExpression(
     return { isValid: true, amountMinor: '0', displayMajor: '0' };
   }
 
-  // Strip trailing operators so live typing like '12.50 +' still evaluates to 12.50
   const cleaned = normalized.replace(/[+\-*/.\s]+$/, '');
   if (!cleaned) {
     return { isValid: true, amountMinor: '0', displayMajor: '0' };
   }
 
-  // Tokenize numbers and operators (+, -, *, /)
+  // If the cleaned expression is a single literal number (no binary operator), parse directly via exact string scaling
+  if (/^[+-]?(\d+\.?\d*|\.\d+)$/.test(cleaned)) {
+    const rawMinor = parseMajorToMinorUnits(cleaned, decimalPlaces);
+    const minorBig = BigInt(rawMinor);
+    const clampedBig = !options?.allowNegative && minorBig < 0n ? 0n : minorBig;
+    const divisor = 10n ** BigInt(decimalPlaces);
+    const isNeg = clampedBig < 0n;
+    const absBig = isNeg ? -clampedBig : clampedBig;
+    const whole = absBig / divisor;
+    const frac = absBig % divisor;
+    let displayMajor = whole.toString();
+    if (decimalPlaces > 0) {
+      const fracStr = frac.toString().padStart(decimalPlaces, '0');
+      displayMajor +=
+        decimalPlaces <= 2
+          ? `.${fracStr}`
+          : `.${fracStr}`.replace(/0+$/, '').replace(/\.$/, '');
+    }
+    return {
+      isValid: true,
+      amountMinor: clampedBig.toString(),
+      displayMajor: (isNeg ? '-' : '') + displayMajor,
+    };
+  }
+
   const tokenRegex = /(\d+\.?\d*|\.\d+|[+\-*/])/g;
   const tokens = cleaned.match(tokenRegex);
   if (!tokens || tokens.length === 0) {
     return { isValid: false, amountMinor: '0', displayMajor: '0' };
   }
 
-  // Handle leading negative sign
   const processedTokens: (number | string)[] = [];
   let i = 0;
   while (i < tokens.length) {
@@ -65,7 +88,6 @@ export function evaluateCalculatorExpression(
     i++;
   }
 
-  // First pass: * and /
   const pass1: (number | string)[] = [];
   let idx = 0;
   while (idx < processedTokens.length) {
@@ -84,7 +106,6 @@ export function evaluateCalculatorExpression(
     }
   }
 
-  // Second pass: + and -
   let total = Number(pass1[0] ?? 0);
   let j = 1;
   while (j < pass1.length) {
@@ -102,8 +123,9 @@ export function evaluateCalculatorExpression(
     return { isValid: false, amountMinor: '0', displayMajor: '0' };
   }
 
-  const clampedTotal = Math.max(0, total);
-  const amountMinor = parseMajorToMinorUnits(clampedTotal, decimalPlaces);
+  const clampedTotal = options?.allowNegative ? total : Math.max(0, total);
+  const fixedStr = clampedTotal.toFixed(decimalPlaces + 2);
+  const amountMinor = parseMajorToMinorUnits(fixedStr, decimalPlaces);
   const factor = Math.pow(10, decimalPlaces);
   const exactMajor = Number(amountMinor) / factor;
   const displayMajor =

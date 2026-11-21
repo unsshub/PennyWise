@@ -1,6 +1,7 @@
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import {
+  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -10,6 +11,7 @@ import {
 
 import { WalletModal } from '@/components/wallet-modal';
 import { usePennyWise } from '@/context/pennywise-context';
+import { SUPPORTED_CURRENCIES } from '@/domain/currency';
 import type { HomeSectionId, Wallet } from '@/domain/types';
 
 export default function HomeScreen() {
@@ -19,6 +21,7 @@ export default function HomeScreen() {
     baseCurrency,
     netWorthMinor,
     wallets,
+    allWalletsIncludingArchived,
     categories,
     transactions,
     budgetEvaluations,
@@ -29,12 +32,17 @@ export default function HomeScreen() {
     spendingPaceThisMonth,
     formatAmount,
     openQuickEntry,
-    seedDemoData,
     refresh,
   } = usePennyWise();
 
   const [walletModalOpen, setWalletModalOpen] = useState(false);
   const [editingWallet, setEditingWallet] = useState<Wallet | null>(null);
+  const [showArchivedWallets, setShowArchivedWallets] = useState(false);
+
+  const displayedWallets = showArchivedWallets
+    ? allWalletsIncludingArchived
+    : wallets;
+  const archivedCount = allWalletsIncludingArchived.length - wallets.length;
 
   const togglePrivacyMask = () => {
     engine.updatePreferences({
@@ -43,12 +51,35 @@ export default function HomeScreen() {
     refresh();
   };
 
+  const handleCompleteOnboarding = (selectedBase: string) => {
+    engine.setBaseCurrency(selectedBase);
+    engine.updatePreferences({ hasCompletedOnboarding: true });
+    refresh();
+  };
+
   const renderWalletsCarouselSection = () => (
     <View key="WALLETS_CAROUSEL" style={styles.sectionBlock}>
       <View style={styles.sectionHeaderRow}>
-        <Text style={[styles.sectionTitle, { color: theme.textPrimary }]}>
-          Wallets ({wallets.length})
-        </Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+          <Text style={[styles.sectionTitle, { color: theme.textPrimary }]}>
+            Wallets ({displayedWallets.length})
+          </Text>
+          {archivedCount > 0 && (
+            <Pressable
+              onPress={() => setShowArchivedWallets((v) => !v)}
+              style={[
+                styles.archivedToggle,
+                { backgroundColor: theme.surfaceElevated },
+              ]}
+            >
+              <Text style={{ color: theme.textSecondary, fontSize: 11, fontWeight: '700' }}>
+                {showArchivedWallets
+                  ? 'Hide Archived'
+                  : `Show Archived (${archivedCount})`}
+              </Text>
+            </Pressable>
+          )}
+        </View>
         <Pressable
           onPress={() => {
             setEditingWallet(null);
@@ -66,7 +97,7 @@ export default function HomeScreen() {
         showsHorizontalScrollIndicator={false}
         style={styles.carousel}
       >
-        {wallets.map((w) => {
+        {displayedWallets.map((w) => {
           const convertedMinor = engine.convertWalletBalanceToBaseMinor(w);
           const isForeign = w.currencyCode !== baseCurrency;
           return (
@@ -82,6 +113,7 @@ export default function HomeScreen() {
                   backgroundColor: theme.surface,
                   borderColor: w.color + '88',
                   borderLeftColor: w.color,
+                  opacity: w.isArchived ? 0.6 : 1,
                 },
               ]}
             >
@@ -97,6 +129,7 @@ export default function HomeScreen() {
                 <View style={styles.currencyPill}>
                   <Text style={[styles.currencyPillText, { color: w.color }]}>
                     {w.currencyCode}
+                    {w.isArchived ? ' • Archived' : ''}
                   </Text>
                 </View>
               </View>
@@ -234,7 +267,6 @@ export default function HomeScreen() {
                       },
                     ]}
                   />
-                  {/* Today Time-Elapsed Pace Marker */}
                   <View
                     style={[
                       styles.todayMarker,
@@ -455,7 +487,8 @@ export default function HomeScreen() {
       </View>
 
       {transactions.length === 0 ? (
-        <View
+        <Pressable
+          onPress={() => openQuickEntry({ defaultType: 'EXPENSE' })}
           style={[
             styles.emptyCard,
             { backgroundColor: theme.surface, borderColor: theme.border },
@@ -465,17 +498,9 @@ export default function HomeScreen() {
             ⚡ Fast Daily Expense Tracking
           </Text>
           <Text style={[styles.emptyCardSub, { color: theme.textSecondary }]}>
-            Tap the floating ＋ button below to log an expense in seconds, or load sample multi-currency data to explore.
+            Tap the floating ＋ button below to log an expense or income in seconds.
           </Text>
-          <Pressable
-            onPress={seedDemoData}
-            style={[styles.demoBtn, { backgroundColor: theme.accent }]}
-          >
-            <Text style={styles.demoBtnText}>
-              ✨ Load Sample Cashew Demo Data (USD, EUR, BTC)
-            </Text>
-          </Pressable>
-        </View>
+        </Pressable>
       ) : (
         transactions.slice(0, 5).map((tx) => {
           const cat = categories.find((c) => c.id === tx.categoryId);
@@ -643,14 +668,78 @@ export default function HomeScreen() {
         editingWallet={editingWallet}
         onClose={() => setWalletModalOpen(false)}
       />
+
+      {/* First-Launch Onboarding Modal: Select Base Currency */}
+      <Modal
+        visible={!preferences.hasCompletedOnboarding}
+        animationType="fade"
+        transparent
+      >
+        <View style={styles.onboardingOverlay}>
+          <View
+            style={[
+              styles.onboardingCard,
+              { backgroundColor: theme.surface, borderColor: theme.border },
+            ]}
+          >
+            <Text style={[styles.appBrand, { color: theme.accent }]}>
+              WELCOME TO PENNYWISE
+            </Text>
+            <Text style={[styles.onboardingTitle, { color: theme.textPrimary }]}>
+              Choose Your Base Currency
+            </Text>
+            <Text style={[styles.onboardingSub, { color: theme.textSecondary }]}>
+              Your Net Worth, cross-wallet insights, and global Budgets will convert into your Base Currency. You can change this anytime in settings.
+            </Text>
+            <ScrollView style={{ maxHeight: 260, marginVertical: 12 }}>
+              {SUPPORTED_CURRENCIES.map((curr) => (
+                <Pressable
+                  key={curr.code}
+                  onPress={() => handleCompleteOnboarding(curr.code)}
+                  style={[
+                    styles.onboardingCurrencyRow,
+                    {
+                      backgroundColor:
+                        curr.code === baseCurrency
+                          ? theme.accent + '22'
+                          : theme.surfaceElevated,
+                      borderColor:
+                        curr.code === baseCurrency ? theme.accent : theme.border,
+                    },
+                  ]}
+                >
+                  <Text
+                    style={{
+                      color: theme.textPrimary,
+                      fontWeight: '800',
+                      fontSize: 15,
+                    }}
+                  >
+                    {curr.symbol} {curr.code} — {curr.name}
+                  </Text>
+                  <Text style={{ color: theme.textMuted, fontSize: 12 }}>
+                    {curr.decimalPlaces} decimals
+                  </Text>
+                </Pressable>
+              ))}
+            </ScrollView>
+            <Pressable
+              onPress={() => handleCompleteOnboarding(baseCurrency)}
+              style={[styles.onboardingBtn, { backgroundColor: theme.accent }]}
+            >
+              <Text style={{ color: '#FFFFFF', fontWeight: '800', fontSize: 15 }}>
+                Continue with {baseCurrency}
+              </Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
+  container: { flex: 1 },
   scrollContent: {
     paddingHorizontal: 16,
     paddingTop: 18,
@@ -719,6 +808,11 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 16,
     fontWeight: '800',
+  },
+  archivedToggle: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
   },
   actionLink: {
     fontSize: 13,
@@ -937,16 +1031,39 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 18,
   },
-  demoBtn: {
-    marginTop: 12,
-    paddingVertical: 11,
-    paddingHorizontal: 14,
-    borderRadius: 12,
-    alignItems: 'center',
+  onboardingOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.75)',
+    justifyContent: 'center',
+    padding: 20,
   },
-  demoBtnText: {
-    color: '#FFFFFF',
+  onboardingCard: {
+    borderRadius: 24,
+    borderWidth: 1,
+    padding: 20,
+  },
+  onboardingTitle: {
+    fontSize: 22,
+    fontWeight: '900',
+    marginTop: 4,
+  },
+  onboardingSub: {
     fontSize: 13,
-    fontWeight: '800',
+    lineHeight: 19,
+    marginTop: 6,
+  },
+  onboardingCurrencyRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    marginBottom: 8,
+  },
+  onboardingBtn: {
+    paddingVertical: 14,
+    borderRadius: 14,
+    alignItems: 'center',
   },
 });

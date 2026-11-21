@@ -14,6 +14,18 @@ import { usePennyWise } from '@/context/pennywise-context';
 import { getCurrencyDefinition, parseMajorToMinorUnits } from '@/domain/currency';
 import type { Budget, BudgetPeriodType, BudgetScopeType } from '@/domain/types';
 
+const BUDGET_COLORS = [
+  '#10B981',
+  '#F97316',
+  '#3B82F6',
+  '#8B5CF6',
+  '#EC4899',
+  '#EAB308',
+  '#06B6D4',
+];
+
+const BUDGET_ICONS = ['🎯', '🍔', '🏠', '✈️', '🛍️', '🚗', '🎬', '🐖'];
+
 export default function BudgetsScreen() {
   const {
     engine,
@@ -98,6 +110,24 @@ export default function BudgetsScreen() {
       setIsPinnedToHome(true);
     }
     setModalOpen(true);
+  };
+
+  const handleMoveBudget = (direction: -1 | 1) => {
+    if (!editingBudget) {
+      return;
+    }
+    const ids = budgets.map((b) => b.id);
+    const idx = ids.indexOf(editingBudget.id);
+    const targetIdx = idx + direction;
+    if (idx < 0 || targetIdx < 0 || targetIdx >= ids.length) {
+      return;
+    }
+    const copy = [...ids];
+    const tmp = copy[idx];
+    copy[idx] = copy[targetIdx];
+    copy[targetIdx] = tmp;
+    engine.reorderBudgets(copy);
+    refresh();
   };
 
   const handleSave = () => {
@@ -476,6 +506,54 @@ export default function BudgetsScreen() {
                 ]}
               />
 
+              {/* Icon & Color Pickers */}
+              <Text style={[styles.label, { color: theme.textSecondary }]}>
+                Budget Icon & Color Theme
+              </Text>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                style={styles.chipRow}
+              >
+                {BUDGET_ICONS.map((ic) => (
+                  <Pressable
+                    key={ic}
+                    onPress={() => setIcon(ic)}
+                    style={[
+                      styles.iconChip,
+                      {
+                        backgroundColor:
+                          icon === ic ? theme.accent + '33' : theme.surfaceElevated,
+                        borderColor: icon === ic ? theme.accent : theme.border,
+                      },
+                    ]}
+                  >
+                    <Text style={{ fontSize: 18 }}>{ic}</Text>
+                  </Pressable>
+                ))}
+              </ScrollView>
+
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                style={styles.chipRow}
+              >
+                {BUDGET_COLORS.map((col) => (
+                  <Pressable
+                    key={col}
+                    onPress={() => setColor(col)}
+                    style={[
+                      styles.colorDot,
+                      {
+                        backgroundColor: col,
+                        borderWidth: color === col ? 3 : 0,
+                        borderColor: theme.textPrimary,
+                      },
+                    ]}
+                  />
+                ))}
+              </ScrollView>
+
               <Text style={[styles.label, { color: theme.textSecondary }]}>
                 Budget Period
               </Text>
@@ -570,7 +648,7 @@ export default function BudgetsScreen() {
                 {periodType === 'INTERVAL' && (
                   <View style={{ flex: 1 }}>
                     <Text style={[styles.label, { color: theme.textSecondary }]}>
-                      Every N Days
+                      Every N ({intervalUnit})
                     </Text>
                     <TextInput
                       value={intervalCount}
@@ -588,6 +666,40 @@ export default function BudgetsScreen() {
                   </View>
                 )}
               </View>
+
+              {periodType === 'INTERVAL' && (
+                <View style={styles.scopeRow}>
+                  {(['DAYS', 'WEEKS', 'MONTHS'] as const).map((unit) => {
+                    const active = intervalUnit === unit;
+                    return (
+                      <Pressable
+                        key={unit}
+                        onPress={() => setIntervalUnit(unit)}
+                        style={[
+                          styles.scopeBtn,
+                          {
+                            backgroundColor: active
+                              ? theme.accent
+                              : theme.surfaceElevated,
+                            borderColor: active ? theme.accent : theme.border,
+                          },
+                        ]}
+                      >
+                        <Text
+                          style={{
+                            color: active ? '#FFFFFF' : theme.textPrimary,
+                            fontSize: 12,
+                            fontWeight: '700',
+                            textAlign: 'center',
+                          }}
+                        >
+                          Every N {unit}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              )}
 
               <Text style={[styles.label, { color: theme.textSecondary }]}>
                 Budget Scope
@@ -733,6 +845,38 @@ export default function BudgetsScreen() {
                   trackColor={{ false: theme.border, true: theme.accent }}
                 />
               </View>
+
+              {editingBudget && (
+                <View style={styles.switchRow}>
+                  <Text style={{ color: theme.textPrimary, fontWeight: '700' }}>
+                    Display Order
+                  </Text>
+                  <View style={{ flexDirection: 'row', gap: 8 }}>
+                    <Pressable
+                      onPress={() => handleMoveBudget(-1)}
+                      style={[
+                        styles.chip,
+                        { backgroundColor: theme.surfaceElevated },
+                      ]}
+                    >
+                      <Text style={{ color: theme.textPrimary, fontWeight: '800' }}>
+                        ↑ Move Up
+                      </Text>
+                    </Pressable>
+                    <Pressable
+                      onPress={() => handleMoveBudget(1)}
+                      style={[
+                        styles.chip,
+                        { backgroundColor: theme.surfaceElevated },
+                      ]}
+                    >
+                      <Text style={{ color: theme.textPrimary, fontWeight: '800' }}>
+                        ↓ Move Down
+                      </Text>
+                    </Pressable>
+                  </View>
+                </View>
+              )}
             </ScrollView>
 
             <View style={styles.modalFooter}>
@@ -900,7 +1044,7 @@ const styles = StyleSheet.create({
     borderRadius: 22,
     borderWidth: 1,
     padding: 18,
-    maxHeight: '90%',
+    maxHeight: '92%',
   },
   modalTitle: {
     fontSize: 18,
@@ -930,6 +1074,21 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     borderWidth: 1,
     marginRight: 8,
+  },
+  iconChip: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 8,
+  },
+  colorDot: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    marginRight: 10,
   },
   dateRow: {
     flexDirection: 'row',
