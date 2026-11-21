@@ -34,6 +34,8 @@ export default function BudgetsScreen() {
     categories,
     budgets,
     theme,
+    t,
+    localizeName,
     formatAmount,
     refresh,
     revision,
@@ -202,17 +204,17 @@ export default function BudgetsScreen() {
         <View style={styles.headerRow}>
           <View>
             <Text style={[styles.pageTitle, { color: theme.textPrimary }]}>
-              Flexible Budgets
+              {t('flexible_budgets_title')}
             </Text>
             <Text style={[styles.pageSubtitle, { color: theme.textSecondary }]}>
-              Real-time Daily Spending Allowance & pace tracking
+              {t('flexible_budgets_sub')}
             </Text>
           </View>
           <Pressable
             onPress={() => openEditor(null)}
             style={[styles.newBtn, { backgroundColor: theme.accent }]}
           >
-            <Text style={styles.newBtnText}>+ New Budget</Text>
+            <Text style={styles.newBtnText}>{t('new_budget_btn')}</Text>
           </Pressable>
         </View>
 
@@ -228,13 +230,13 @@ export default function BudgetsScreen() {
             style={styles.cycleStepBtn}
           >
             <Text style={{ color: theme.accent, fontWeight: '800' }}>
-              ← Prev Cycle
+              {t('prev_cycle')}
             </Text>
           </Pressable>
           <Text style={[styles.cycleLabel, { color: theme.textPrimary }]}>
             {cycleOffset === 0
-              ? 'Current Active Cycle'
-              : `${Math.abs(cycleOffset)} Cycle(s) Ago`}
+              ? t('current_active_cycle')
+              : `${Math.abs(cycleOffset)} ${t('cycles_ago')}`}
           </Text>
           <Pressable
             onPress={() => setCycleOffset((c) => Math.min(0, c + 1))}
@@ -247,7 +249,7 @@ export default function BudgetsScreen() {
                 fontWeight: '800',
               }}
             >
-              Next Cycle →
+              {t('next_cycle')}
             </Text>
           </Pressable>
         </View>
@@ -260,10 +262,10 @@ export default function BudgetsScreen() {
             ]}
           >
             <Text style={[styles.emptyTitle, { color: theme.textPrimary }]}>
-              🎯 Plan a Budget That Fits Your Life
+              {t('plan_budget_empty')}
             </Text>
             <Text style={[styles.emptySub, { color: theme.textSecondary }]}>
-              Plan by week, month (anchored to any payday), year, custom interval, or a custom trip date range—with either Automatic Category/Wallet filtering or Manual Transaction Assignment.
+              {t('plan_budget_empty_sub')}
             </Text>
           </View>
         ) : (
@@ -300,17 +302,17 @@ export default function BudgetsScreen() {
                         {ev.budget.periodType} • {ev.periodStart} → {ev.periodEnd}
                       </Text>
                       <Text style={{ color: theme.textMuted, fontSize: 11 }}>
-                        Scope:{' '}
+                        {t('scope_label')}{' '}
                         {ev.budget.scopeType === 'MANUAL_ASSIGNMENT'
-                          ? '📌 Manual Assignment (Trip/Event)'
+                          ? t('manual_assignment_scope')
                           : ev.budget.filterCategoryIds.length === 0 &&
                               ev.budget.filterWalletIds.length === 0
-                            ? 'All Categories & Wallets'
+                            ? t('all_cats_wallets')
                             : `${
                                 ev.budget.filterCategoryIds.length || 'All'
-                              } Categories • ${
+                              } • ${
                                 ev.budget.filterWalletIds.length || 'All'
-                              } Wallets`}
+                              }`}
                       </Text>
                     </View>
                   </View>
@@ -335,7 +337,7 @@ export default function BudgetsScreen() {
                         fontWeight: '700',
                       }}
                     >
-                      DAILY SPENDING ALLOWANCE ({ev.remainingDaysInclusive}d remaining)
+                      {t('daily_spending_allowance_caps')} ({ev.remainingDaysInclusive}d {t('remaining_label')})
                     </Text>
                     <Text
                       style={[
@@ -348,7 +350,7 @@ export default function BudgetsScreen() {
                         ev.budget.currencyCode,
                         ev.budget.decimalPlaces
                       )}{' '}
-                      / day
+                      {t('per_day')}
                     </Text>
                   </View>
                   <View style={{ alignItems: 'flex-end' }}>
@@ -359,7 +361,7 @@ export default function BudgetsScreen() {
                         fontWeight: '700',
                       }}
                     >
-                      {ev.percentSpent.toFixed(0)}% SPENT
+                      {ev.percentSpent.toFixed(0)}% {t('spent_caps')}
                     </Text>
                     <Text
                       style={{
@@ -368,7 +370,7 @@ export default function BudgetsScreen() {
                         marginTop: 2,
                       }}
                     >
-                      vs {ev.percentTimeElapsed}% time elapsed
+                      {ev.percentTimeElapsed}% {t('time_elapsed_vs')}
                     </Text>
                   </View>
                 </View>

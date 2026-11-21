@@ -197,6 +197,7 @@ export interface HomeSection {
 }
 
 export type ThemeMode = 'SYSTEM' | 'LIGHT' | 'DARK' | 'AMOLED';
+export type AppLanguage = 'en' | 'ar';
 
 export interface UserPreferences {
   themeMode: ThemeMode;
@@ -204,6 +205,7 @@ export interface UserPreferences {
   privacyMaskEnabled: boolean;
   biometricLockEnabled: boolean;
   hasCompletedOnboarding?: boolean;
+  language?: AppLanguage;
 }
 
 export interface BackupSnapshot {

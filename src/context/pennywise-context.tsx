@@ -10,7 +10,13 @@ import { AppState, useColorScheme } from 'react-native';
 
 import { formatMinorUnits } from '@/domain/currency';
 import type { FinanceEngine } from '@/domain/finance-engine';
+import {
+  localizeCategoryName,
+  localizeHomeSectionTitle,
+  translateKey,
+} from '@/domain/i18n';
 import type {
+  AppLanguage,
   Budget,
   BudgetEvaluation,
   Category,
@@ -67,6 +73,12 @@ interface PennyWiseContextValue {
   exchangeRates: ExchangeRate[];
   homeSections: HomeSection[];
   preferences: UserPreferences;
+  language: AppLanguage;
+  isRTL: boolean;
+  setLanguage: (lang: AppLanguage) => void;
+  t: (key: string) => string;
+  localizeName: (rawName: string) => string;
+  localizeSection: (sectionId: string, fallbackTitle: string) => string;
   updatePreferences: (updates: Partial<UserPreferences>) => void;
   togglePrivacyMask: () => void;
   theme: ThemePalette;
@@ -179,6 +191,32 @@ export function PennyWiseProvider({ children }: { children: React.ReactNode }) {
       };
     });
   }, [engine]);
+
+  const language: AppLanguage = snapshot.preferences.language ?? 'en';
+  const isRTL = language === 'ar';
+
+  const setLanguage = useCallback(
+    (lang: AppLanguage) => {
+      updatePreferences({ language: lang });
+    },
+    [updatePreferences]
+  );
+
+  const t = useCallback(
+    (key: string) => translateKey(language, key),
+    [language]
+  );
+
+  const localizeName = useCallback(
+    (rawName: string) => localizeCategoryName(language, rawName),
+    [language]
+  );
+
+  const localizeSection = useCallback(
+    (sectionId: string, fallbackTitle: string) =>
+      localizeHomeSectionTitle(language, sectionId, fallbackTitle),
+    [language]
+  );
 
   useEffect(() => {
     const today = new Date().toISOString().slice(0, 10);
@@ -303,6 +341,12 @@ export function PennyWiseProvider({ children }: { children: React.ReactNode }) {
       exchangeRates,
       homeSections,
       preferences,
+      language,
+      isRTL,
+      setLanguage,
+      t,
+      localizeName,
+      localizeSection,
       updatePreferences,
       togglePrivacyMask,
       theme,
@@ -333,6 +377,12 @@ export function PennyWiseProvider({ children }: { children: React.ReactNode }) {
       exchangeRates,
       homeSections,
       preferences,
+      language,
+      isRTL,
+      setLanguage,
+      t,
+      localizeName,
+      localizeSection,
       updatePreferences,
       togglePrivacyMask,
       theme,

@@ -36,7 +36,14 @@ export function WalletModal({
   editingWallet: Wallet | null;
   onClose: () => void;
 }) {
-  const { engine, allWalletsIncludingArchived, theme, refresh } = usePennyWise();
+  const {
+    engine,
+    allWalletsIncludingArchived,
+    theme,
+    t,
+    localizeName,
+    refresh,
+  } = usePennyWise();
 
   const [name, setName] = useState('');
   const [currencyCode, setCurrencyCode] = useState('USD');
@@ -153,7 +160,9 @@ export function WalletModal({
         >
           <View style={styles.headerRow}>
             <Text style={[styles.titleText, { color: theme.textPrimary }]}>
-              {editingWallet ? `Edit Wallet (${editingWallet.name})` : 'New Multi-Currency Wallet'}
+              {editingWallet
+                ? `${t('edit_wallet')} (${localizeName(editingWallet.name)})`
+                : t('new_wallet')}
             </Text>
             <Pressable onPress={onClose}>
               <Text style={[styles.closeText, { color: theme.textSecondary }]}>✕</Text>
@@ -162,12 +171,12 @@ export function WalletModal({
 
           <ScrollView showsVerticalScrollIndicator={false}>
             <Text style={[styles.label, { color: theme.textSecondary }]}>
-              Wallet Name
+              {t('wallet_name')}
             </Text>
             <TextInput
               value={name}
               onChangeText={setName}
-              placeholder="e.g. Wallet, Euros, Bitcoin"
+              placeholder={t('wallet_name_placeholder')}
               placeholderTextColor={theme.textMuted}
               style={[
                 styles.input,
@@ -180,7 +189,7 @@ export function WalletModal({
             />
 
             <Text style={[styles.label, { color: theme.textSecondary }]}>
-              Currency (Fiat & Crypto)
+              {t('currency_fiat_crypto')}
             </Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.row}>
               {SUPPORTED_CURRENCIES.map((c) => {
@@ -218,8 +227,8 @@ export function WalletModal({
 
             <Text style={[styles.label, { color: theme.textSecondary }]}>
               {editingWallet
-                ? 'Current Balance (Reconciles via Balance Adjustment)'
-                : 'Starting Balance'}
+                ? t('current_balance_reconcile')
+                : t('starting_balance')}
             </Text>
             <TextInput
               value={balanceMajor}
@@ -238,7 +247,7 @@ export function WalletModal({
             />
 
             <Text style={[styles.label, { color: theme.textSecondary }]}>
-              Icon & Color
+              {t('icon_and_color')}
             </Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.row}>
               {WALLET_ICONS.map((ic) => (
@@ -279,10 +288,10 @@ export function WalletModal({
             <View style={styles.switchRow}>
               <View style={{ flex: 1 }}>
                 <Text style={[styles.switchTitle, { color: theme.textPrimary }]}>
-                  Include in Net Worth
+                  {t('include_net_worth_title')}
                 </Text>
                 <Text style={[styles.switchSub, { color: theme.textSecondary }]}>
-                  Count this Wallet toward your total converted Net Worth
+                  {t('include_net_worth_sub')}
                 </Text>
               </View>
               <Switch
@@ -297,10 +306,10 @@ export function WalletModal({
                 <View style={styles.switchRow}>
                   <View style={{ flex: 1 }}>
                     <Text style={[styles.switchTitle, { color: theme.textPrimary }]}>
-                      Archive Wallet
+                      {t('archive_wallet_title')}
                     </Text>
                     <Text style={[styles.switchSub, { color: theme.textSecondary }]}>
-                      Hide from active Wallets Carousel while preserving history
+                      {t('archive_wallet_sub')}
                     </Text>
                   </View>
                   <Switch
@@ -312,7 +321,7 @@ export function WalletModal({
 
                 <View style={styles.reorderRow}>
                   <Text style={[styles.switchTitle, { color: theme.textPrimary }]}>
-                    Carousel Display Order
+                    {t('carousel_order')}
                   </Text>
                   <View style={{ flexDirection: 'row', gap: 8 }}>
                     <Pressable
@@ -323,7 +332,7 @@ export function WalletModal({
                       ]}
                     >
                       <Text style={{ color: theme.textPrimary, fontWeight: '800' }}>
-                        ← Move Earlier
+                        {t('move_earlier')}
                       </Text>
                     </Pressable>
                     <Pressable
@@ -334,7 +343,7 @@ export function WalletModal({
                       ]}
                     >
                       <Text style={{ color: theme.textPrimary, fontWeight: '800' }}>
-                        Move Later →
+                        {t('move_later')}
                       </Text>
                     </Pressable>
                   </View>
@@ -349,7 +358,9 @@ export function WalletModal({
                 onPress={handleDelete}
                 style={[styles.deleteBtn, { backgroundColor: theme.danger + '22' }]}
               >
-                <Text style={{ color: theme.danger, fontWeight: '700' }}>Delete</Text>
+                <Text style={{ color: theme.danger, fontWeight: '700' }}>
+                  {t('delete_btn')}
+                </Text>
               </Pressable>
             )}
             <Pressable
@@ -357,7 +368,7 @@ export function WalletModal({
               style={[styles.saveBtn, { backgroundColor: theme.accent }]}
             >
               <Text style={styles.saveText}>
-                {editingWallet ? 'Save Wallet' : 'Create Wallet'}
+                {editingWallet ? t('save_wallet') : t('create_wallet')}
               </Text>
             </Pressable>
           </View>

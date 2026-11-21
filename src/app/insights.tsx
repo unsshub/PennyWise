@@ -17,6 +17,8 @@ export default function InsightsScreen() {
     wallets,
     categories,
     theme,
+    t,
+    localizeName,
     formatAmount,
     openQuickEntry,
     revision,
@@ -218,10 +220,10 @@ export default function InsightsScreen() {
         showsVerticalScrollIndicator={false}
       >
         <Text style={[styles.pageTitle, { color: theme.textPrimary }]}>
-          Spending Insights & Analytics
+          {t('insights_title')}
         </Text>
         <Text style={[styles.pageSubtitle, { color: theme.textSecondary }]}>
-          Spot trends, compare periods, and see where your money goes
+          {t('insights_sub')}
         </Text>
 
         {/* Period Window & Wallet Filter Strip */}
@@ -355,13 +357,13 @@ export default function InsightsScreen() {
             ]}
           >
             <Text style={[styles.kpiLabel, { color: theme.textSecondary }]}>
-              Average Daily Spend
+              {t('avg_daily_spend')}
             </Text>
             <Text style={[styles.kpiValue, { color: theme.danger }]}>
               {formatAmount(avgDailySpendMinor, baseCurrency)}
             </Text>
             <Text style={[styles.kpiSub, { color: theme.textMuted }]}>
-              Total: {formatAmount(cashFlowSummary.totalExpenseBaseMinor, baseCurrency)}
+              {t('total_label')} {formatAmount(cashFlowSummary.totalExpenseBaseMinor, baseCurrency)}
             </Text>
           </View>
 
@@ -372,7 +374,7 @@ export default function InsightsScreen() {
             ]}
           >
             <Text style={[styles.kpiLabel, { color: theme.textSecondary }]}>
-              % Change vs Prev Period
+              {t('pct_change_prev')}
             </Text>
             <Text
               style={[
@@ -389,7 +391,7 @@ export default function InsightsScreen() {
               {paceComparison.percentChangeAtReferenceDay}%
             </Text>
             <Text style={[styles.kpiSub, { color: theme.textMuted }]}>
-              Delta:{' '}
+              {t('delta_label')}{' '}
               {formatAmount(
                 paceComparison.deltaAtReferenceDayMinor,
                 baseCurrency,
@@ -408,20 +410,20 @@ export default function InsightsScreen() {
             ]}
           >
             <Text style={[styles.kpiLabel, { color: theme.textSecondary }]}>
-              Biggest Expense Category
+              {t('biggest_expense_cat')}
             </Text>
             <Text
               style={[styles.kpiValue, { color: theme.textPrimary }]}
               numberOfLines={1}
             >
               {biggestCategory
-                ? `${biggestCategory.icon} ${biggestCategory.name}`
-                : 'None'}
+                ? `${biggestCategory.icon} ${localizeName(biggestCategory.name)}`
+                : t('none_label')}
             </Text>
             <Text style={[styles.kpiSub, { color: theme.textMuted }]}>
               {biggestCategory
                 ? `${formatAmount(biggestCategory.amountMinor, baseCurrency)} (${biggestCategory.percentage}%)`
-                : 'No expenses logged'}
+                : t('no_expenses_logged')}
             </Text>
           </View>
 
@@ -432,7 +434,7 @@ export default function InsightsScreen() {
             ]}
           >
             <Text style={[styles.kpiLabel, { color: theme.textSecondary }]}>
-              Net Cash Flow
+              {t('net_cash_flow')}
             </Text>
             <Text
               style={[
@@ -453,7 +455,7 @@ export default function InsightsScreen() {
               )}
             </Text>
             <Text style={[styles.kpiSub, { color: theme.textMuted }]}>
-              Income: {formatAmount(cashFlowSummary.totalIncomeBaseMinor, baseCurrency)}
+              {t('type_income')}: {formatAmount(cashFlowSummary.totalIncomeBaseMinor, baseCurrency)}
             </Text>
           </View>
         </View>
@@ -468,10 +470,10 @@ export default function InsightsScreen() {
           <View style={styles.chartHeader}>
             <View>
               <Text style={[styles.chartTitle, { color: theme.textPrimary }]}>
-                📈 Spending Pace Comparison Line Chart
+                {t('pace_chart_title')}
               </Text>
               <Text style={[styles.chartSub, { color: theme.textSecondary }]}>
-                Cumulative expenses: This Period (solid line/nodes) vs. Last Period (dashed nodes)
+                {t('pace_chart_sub')}
               </Text>
             </View>
           </View>
@@ -566,10 +568,10 @@ export default function InsightsScreen() {
           <View style={styles.chartHeader}>
             <View style={{ flex: 1 }}>
               <Text style={[styles.chartTitle, { color: theme.textPrimary }]}>
-                🍩 Category Breakdown Donut Chart
+                {t('donut_chart_title')}
               </Text>
               <Text style={[styles.chartSub, { color: theme.textSecondary }]}>
-                Tap a Category slice to drill down into Subcategories & Transactions
+                {t('donut_chart_sub')}
               </Text>
             </View>
             <View style={styles.flowToggle}>
@@ -598,7 +600,9 @@ export default function InsightsScreen() {
                       fontWeight: '800',
                     }}
                   >
-                    {ft === 'EXPENSE' ? 'Expenses' : 'Income'}
+                    {ft === 'EXPENSE'
+                      ? t('expenses_filter')
+                      : t('income_filter')}
                   </Text>
                 </Pressable>
               ))}
@@ -714,13 +718,13 @@ export default function InsightsScreen() {
                             fontSize: 14,
                           }}
                         >
-                          {slice.name}
+                          {localizeName(slice.name)}
                         </Text>
                         <Text
                           style={{ color: theme.textSecondary, fontSize: 11 }}
                         >
-                          {slice.percentage}% of total •{' '}
-                          {slice.subcategories.length} subcategory(s)
+                          {slice.percentage}% •{' '}
+                          {slice.subcategories.length}
                         </Text>
                       </View>
                       <Text
@@ -754,7 +758,7 @@ export default function InsightsScreen() {
                                 fontWeight: '700',
                               }}
                             >
-                              {sub.icon} {sub.name} ({sub.percentage}%)
+                              {sub.icon} {localizeName(sub.name)} ({sub.percentage}%)
                             </Text>
                             <Text
                               style={{
@@ -837,10 +841,10 @@ export default function InsightsScreen() {
           ]}
         >
           <Text style={[styles.chartTitle, { color: theme.textPrimary }]}>
-            📊 Income vs. Expense Cash Flow Bar Graph
+            {t('cash_flow_chart_title')}
           </Text>
           <Text style={[styles.chartSub, { color: theme.textSecondary }]}>
-            Compare inflows (green) against expenses (red) across consecutive periods
+            {t('cash_flow_chart_sub')}
           </Text>
 
           <View style={styles.cashFlowBarsContainer}>
@@ -902,10 +906,10 @@ export default function InsightsScreen() {
           <View style={styles.chartHeader}>
             <View style={{ flex: 1 }}>
               <Text style={[styles.chartTitle, { color: theme.textPrimary }]}>
-                💎 Net Worth & Balance History Line Chart
+                {t('net_worth_chart_title')}
               </Text>
               <Text style={[styles.chartSub, { color: theme.textSecondary }]}>
-                Wealth trajectory over {netWorthHorizon} ({baseCurrency})
+                {t('net_worth_chart_sub')} ({netWorthHorizon} • {baseCurrency})
               </Text>
             </View>
             <View style={styles.flowToggle}>

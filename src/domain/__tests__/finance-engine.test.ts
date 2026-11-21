@@ -803,12 +803,31 @@ test('Slice 08 — Review Hardening: exact string-based 8-decimal BTC parsing, S
     pointsCount: 2,
     stepDays: 3, // Point 0: 2026-11-13 (before transfer out), Point 1: 2026-11-16 (after transfer out)
   });
-  // Before the €100 transfer to an excluded wallet, Net Worth was €100 higher (10000 cents)
+  //Before the €100 transfer to an excluded wallet, Net Worth was €100 higher (10000 cents)
   assert.equal(
     BigInt(history[0].netWorthMinor) - BigInt(history[1].netWorthMinor),
     10000n
   );
 });
+
+test('Slice 09 — Bilingual English / Arabic (i18n) preference persistence and translation lookup', async () => {
+  const { translateKey, localizeCategoryName, localizeHomeSectionTitle } = await import('../i18n');
+  const engine = createInMemoryFinanceEngine();
+
+  assert.equal(engine.getPreferences().language, 'en');
+  assert.equal(translateKey('en', 'total_net_worth'), 'Total Net Worth');
+  assert.equal(translateKey('ar', 'total_net_worth'), 'إجمالي صافي الثروة');
+  assert.equal(localizeCategoryName('ar', 'Food & Dining'), 'طعام ومطاعم');
+  assert.equal(localizeCategoryName('en', 'Food & Dining'), 'Food & Dining');
+  assert.equal(
+    localizeHomeSectionTitle('ar', 'WALLETS_CAROUSEL', 'Wallets'),
+    'المحافظ'
+  );
+
+  engine.updatePreferences({ language: 'ar' });
+  assert.equal(engine.getPreferences().language, 'ar');
+});
+
 
 
 

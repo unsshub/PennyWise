@@ -49,6 +49,10 @@ export default function BillsAndSettingsScreen() {
     exchangeRates,
     homeSections,
     preferences,
+    language,
+    setLanguage,
+    t,
+    localizeSection,
     updatePreferences,
     theme,
     formatAmount,
@@ -322,10 +326,10 @@ export default function BillsAndSettingsScreen() {
         showsVerticalScrollIndicator={false}
       >
         <Text style={[styles.pageTitle, { color: theme.textPrimary }]}>
-          Bills, Personalization & Privacy
+          {t('bills_settings_title')}
         </Text>
         <Text style={[styles.pageSubtitle, { color: theme.textSecondary }]}>
-          Subscriptions, multi-currency rates, custom layout, and local backups
+          {t('bills_settings_sub')}
         </Text>
 
         {statusBanner && (
@@ -337,7 +341,7 @@ export default function BillsAndSettingsScreen() {
             ]}
           >
             <Text style={{ color: theme.accent, fontWeight: '800', fontSize: 13 }}>
-              ✓ {statusBanner} (Tap to dismiss)
+              ✓ {statusBanner}
             </Text>
           </Pressable>
         )}
@@ -352,10 +356,10 @@ export default function BillsAndSettingsScreen() {
           <View style={styles.cardHeader}>
             <View style={{ flex: 1 }}>
               <Text style={[styles.cardTitle, { color: theme.textPrimary }]}>
-                🗓️ Upcoming Bills & Subscriptions
+                🗓️ {t('upcoming_bills_title')}
               </Text>
               <Text style={[styles.cardSub, { color: theme.textSecondary }]}>
-                Total Upcoming Bills This Period:{' '}
+                {t('total_upcoming_period')}{' '}
                 <Text style={{ color: theme.textPrimary, fontWeight: '800' }}>
                   {formatAmount(totalUpcomingBillsThisPeriodMinor, baseCurrency)}
                 </Text>
@@ -365,13 +369,13 @@ export default function BillsAndSettingsScreen() {
               onPress={() => openBillModal(null)}
               style={[styles.primarySmallBtn, { backgroundColor: theme.accent }]}
             >
-              <Text style={styles.primarySmallBtnText}>+ Add Bill</Text>
+              <Text style={styles.primarySmallBtnText}>{t('add_bill_btn')}</Text>
             </Pressable>
           </View>
 
           {upcomingPayments.length === 0 ? (
             <Text style={{ color: theme.textSecondary, fontSize: 13 }}>
-              No upcoming bills or recurring subscriptions scheduled.
+              {t('no_upcoming_bills')}
             </Text>
           ) : (
             upcomingPayments.map((bill) => (
@@ -395,13 +399,12 @@ export default function BillsAndSettingsScreen() {
                         fontSize: 11,
                       }}
                     >
-                      ({bill.type})
+                      ({bill.type === 'INCOME' ? t('type_income') : t('type_expense')})
                     </Text>
                   </Text>
                   <Text style={{ color: theme.textSecondary, fontSize: 11 }}>
-                    Due {bill.dueDate} •{' '}
-                    {bill.autoPay ? '⚡ Auto-Pay on Due Date' : '🔔 Manual Confirm'}{' '}
-                    • Remind {bill.reminderDaysBefore}d before
+                    {t('due_label')} {bill.dueDate} •{' '}
+                    {bill.autoPay ? t('auto_pay_badge') : t('manual_confirm_badge')}
                   </Text>
                 </View>
 
@@ -439,7 +442,7 @@ export default function BillsAndSettingsScreen() {
                     <Text
                       style={{ color: '#FFFFFF', fontSize: 11, fontWeight: '800' }}
                     >
-                      Mark Paid
+                      {t('mark_paid')}
                     </Text>
                   </Pressable>
                   <Pressable
@@ -459,7 +462,7 @@ export default function BillsAndSettingsScreen() {
                         fontWeight: '700',
                       }}
                     >
-                      Skip
+                      {t('skip_btn')}
                     </Text>
                   </Pressable>
                 </View>
@@ -471,7 +474,7 @@ export default function BillsAndSettingsScreen() {
           {recurringRules.length > 0 && (
             <View style={{ marginTop: 12 }}>
               <Text style={[styles.subLabel, { color: theme.textSecondary }]}>
-                Recurring Rules ({recurringRules.length}) — Tap to Edit, Pause, or Delete
+                {t('recurring_rules_header')} ({recurringRules.length})
               </Text>
               {recurringRules.map((rule) => (
                 <View
@@ -494,8 +497,7 @@ export default function BillsAndSettingsScreen() {
                       {rule.title} ({rule.frequency} × {rule.intervalCount}) ✎
                     </Text>
                     <Text style={{ color: theme.textSecondary, fontSize: 11 }}>
-                      Next: {rule.nextDueDate} •{' '}
-                      {rule.isActive ? 'Active' : 'Paused'}
+                      {t('due_label')}: {rule.nextDueDate}
                     </Text>
                   </Pressable>
                   <View style={{ flexDirection: 'row', gap: 6 }}>
@@ -518,7 +520,7 @@ export default function BillsAndSettingsScreen() {
                           fontWeight: '700',
                         }}
                       >
-                        {rule.isActive ? 'Pause' : 'Resume'}
+                        {rule.isActive ? t('pause_btn') : t('resume_btn')}
                       </Text>
                     </Pressable>
                     <Pressable
@@ -538,7 +540,7 @@ export default function BillsAndSettingsScreen() {
                           fontWeight: '700',
                         }}
                       >
-                        Delete
+                        {t('delete_btn')}
                       </Text>
                     </Pressable>
                   </View>
@@ -548,7 +550,7 @@ export default function BillsAndSettingsScreen() {
           )}
         </View>
 
-        {/* Section 2: Make It Yours — Theme, Accent Colors & Home Screen Layout */}
+        {/* Section 2: Make It Yours — Language, Theme, Accent Colors & Home Screen Layout */}
         <View
           style={[
             styles.card,
@@ -556,14 +558,53 @@ export default function BillsAndSettingsScreen() {
           ]}
         >
           <Text style={[styles.cardTitle, { color: theme.textPrimary }]}>
-            🎨 Make It Yours: Themes & Home Layout
+            {t('make_it_yours_title')}
           </Text>
           <Text style={[styles.cardSub, { color: theme.textSecondary }]}>
-            Customize theme mode, accent colors, and Home Section order
+            {t('make_it_yours_sub')}
           </Text>
 
           <Text style={[styles.subLabel, { color: theme.textSecondary }]}>
-            Theme Mode
+            {t('app_language_label')}
+          </Text>
+          <View style={styles.segmentRow}>
+            {(
+              [
+                { code: 'en', label: '🇺🇸 English' },
+                { code: 'ar', label: '🇸🇦 العربية (Arabic)' },
+              ] as const
+            ).map((langOpt) => {
+              const active = language === langOpt.code;
+              return (
+                <Pressable
+                  key={langOpt.code}
+                  onPress={() => setLanguage(langOpt.code)}
+                  style={[
+                    styles.segmentBtn,
+                    {
+                      backgroundColor: active
+                        ? theme.accent
+                        : theme.surfaceElevated,
+                      paddingVertical: 10,
+                    },
+                  ]}
+                >
+                  <Text
+                    style={{
+                      color: active ? '#FFFFFF' : theme.textPrimary,
+                      fontSize: 13,
+                      fontWeight: '800',
+                    }}
+                  >
+                    {langOpt.label}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+
+          <Text style={[styles.subLabel, { color: theme.textSecondary }]}>
+            {t('theme_mode_label')}
           </Text>
           <View style={styles.segmentRow}>
             {(['SYSTEM', 'LIGHT', 'DARK', 'AMOLED'] as ThemeMode[]).map((tm) => {
@@ -598,7 +639,7 @@ export default function BillsAndSettingsScreen() {
           </View>
 
           <Text style={[styles.subLabel, { color: theme.textSecondary }]}>
-            Accent Color Palette
+            {t('accent_palette_label')}
           </Text>
           <ScrollView
             horizontal
@@ -627,7 +668,7 @@ export default function BillsAndSettingsScreen() {
           </ScrollView>
 
           <Text style={[styles.subLabel, { color: theme.textSecondary }]}>
-            Modular Home Sections (Reorder & Toggle)
+            {t('modular_home_sections')}
           </Text>
           {homeSections.map((sec, idx) => (
             <View
@@ -648,7 +689,7 @@ export default function BillsAndSettingsScreen() {
                   marginLeft: 8,
                 }}
               >
-                {sec.title}
+                {localizeSection(sec.id, sec.title)}
               </Text>
               <View style={{ flexDirection: 'row', gap: 6 }}>
                 <Pressable
@@ -688,10 +729,10 @@ export default function BillsAndSettingsScreen() {
           <View style={styles.cardHeader}>
             <View style={{ flex: 1 }}>
               <Text style={[styles.cardTitle, { color: theme.textPrimary }]}>
-                🌍 Multi-Currency & Exchange Rates
+                {t('multi_currency_rates_title')}
               </Text>
               <Text style={[styles.cardSub, { color: theme.textSecondary }]}>
-                Base Currency: {baseCurrency} • Cached offline + manual overrides
+                {baseCurrency}
               </Text>
             </View>
             <Pressable
@@ -715,13 +756,13 @@ export default function BillsAndSettingsScreen() {
                   fontSize: 12,
                 }}
               >
-                ↻ Sync Live
+                {t('sync_live_btn')}
               </Text>
             </Pressable>
           </View>
 
           <Text style={[styles.subLabel, { color: theme.textSecondary }]}>
-            Select Base Currency
+            {t('select_base_currency')}
           </Text>
           <ScrollView
             horizontal
@@ -762,7 +803,7 @@ export default function BillsAndSettingsScreen() {
           </ScrollView>
 
           <Text style={[styles.subLabel, { color: theme.textSecondary }]}>
-            Exchange Rates (1 Unit = X {baseCurrency}) — Tap to Override
+            {t('exchange_rates_tap_override')} ({baseCurrency})
           </Text>
           {exchangeRates
             .filter((r) => r.currencyCode !== baseCurrency)
@@ -868,10 +909,10 @@ export default function BillsAndSettingsScreen() {
           ]}
         >
           <Text style={[styles.cardTitle, { color: theme.textPrimary }]}>
-            🔒 Private & Secure (On-Device Data)
+            {t('private_secure_title')}
           </Text>
           <Text style={[styles.cardSub, { color: theme.textSecondary }]}>
-            Your financial data stays on your device and is never collected or sold.
+            {t('private_secure_sub')}
           </Text>
 
           <View style={styles.switchItem}>
@@ -883,10 +924,10 @@ export default function BillsAndSettingsScreen() {
                   fontSize: 14,
                 }}
               >
-                Biometric App Lock
+                {t('biometric_lock_title')}
               </Text>
               <Text style={{ color: theme.textSecondary, fontSize: 12 }}>
-                Require Android fingerprint / face unlock on launch & resume
+                {t('biometric_lock_sub')}
               </Text>
             </View>
             <Switch
@@ -907,10 +948,10 @@ export default function BillsAndSettingsScreen() {
                   fontSize: 14,
                 }}
               >
-                Privacy Mask (Blur Balances)
+                {t('privacy_mask_title')}
               </Text>
               <Text style={{ color: theme.textSecondary, fontSize: 12 }}>
-                Hide sensitive monetary amounts when viewing in public
+                {t('privacy_mask_sub')}
               </Text>
             </View>
             <Switch
@@ -940,7 +981,7 @@ export default function BillsAndSettingsScreen() {
                   fontSize: 14,
                 }}
               >
-                📄 Export All Transactions to CSV
+                {t('export_all_csv')}
               </Text>
             </Pressable>
 
@@ -961,7 +1002,7 @@ export default function BillsAndSettingsScreen() {
                   fontSize: 14,
                 }}
               >
-                💾 Export Full Backup Snapshot (.json)
+                {t('export_backup_json')}
               </Text>
             </Pressable>
 
@@ -982,7 +1023,7 @@ export default function BillsAndSettingsScreen() {
                   fontSize: 14,
                 }}
               >
-                📂 Pick & Restore Backup Snapshot File
+                {t('pick_restore_backup')}
               </Text>
             </Pressable>
 
@@ -1006,7 +1047,7 @@ export default function BillsAndSettingsScreen() {
                   fontSize: 13,
                 }}
               >
-                🔄 Inspect / Paste Backup Snapshot JSON
+                {t('inspect_paste_backup')}
               </Text>
             </Pressable>
           </View>

@@ -28,6 +28,10 @@ export default function HomeScreen() {
     upcomingPayments,
     homeSections,
     preferences,
+    language,
+    setLanguage,
+    t,
+    localizeName,
     updatePreferences,
     togglePrivacyMask,
     theme,
@@ -57,7 +61,7 @@ export default function HomeScreen() {
       <View style={styles.sectionHeaderRow}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
           <Text style={[styles.sectionTitle, { color: theme.textPrimary }]}>
-            Wallets ({displayedWallets.length})
+            {t('wallets_title')} ({displayedWallets.length})
           </Text>
           {archivedCount > 0 && (
             <Pressable
@@ -69,8 +73,8 @@ export default function HomeScreen() {
             >
               <Text style={{ color: theme.textSecondary, fontSize: 11, fontWeight: '700' }}>
                 {showArchivedWallets
-                  ? 'Hide Archived'
-                  : `Show Archived (${archivedCount})`}
+                  ? t('hide_archived')
+                  : `${t('show_archived')} (${archivedCount})`}
               </Text>
             </Pressable>
           )}
@@ -82,7 +86,7 @@ export default function HomeScreen() {
           }}
         >
           <Text style={[styles.actionLink, { color: theme.accent }]}>
-            + Add Wallet
+            {t('add_wallet')}
           </Text>
         </Pressable>
       </View>
@@ -124,7 +128,7 @@ export default function HomeScreen() {
                 <View style={styles.currencyPill}>
                   <Text style={[styles.currencyPillText, { color: w.color }]}>
                     {w.currencyCode}
-                    {w.isArchived ? ' • Archived' : ''}
+                    {w.isArchived ? ` • ${t('archived_badge')}` : ''}
                   </Text>
                 </View>
               </View>
@@ -132,7 +136,7 @@ export default function HomeScreen() {
                 style={[styles.walletName, { color: theme.textSecondary }]}
                 numberOfLines={1}
               >
-                {w.name}
+                {localizeName(w.name)}
               </Text>
               <Text
                 style={[styles.walletBalance, { color: theme.textPrimary }]}
@@ -146,7 +150,9 @@ export default function HomeScreen() {
                 </Text>
               ) : (
                 <Text style={[styles.walletConverted, { color: theme.textMuted }]}>
-                  {w.includeInNetWorth ? 'Included in Net Worth' : 'Excluded from Total'}
+                  {w.includeInNetWorth
+                    ? t('included_in_net_worth')
+                    : t('excluded_from_total')}
                 </Text>
               )}
             </Pressable>
@@ -162,11 +168,11 @@ export default function HomeScreen() {
       <View key="PINNED_BUDGETS" style={styles.sectionBlock}>
         <View style={styles.sectionHeaderRow}>
           <Text style={[styles.sectionTitle, { color: theme.textPrimary }]}>
-            Budgets & Daily Allowance
+            {t('budgets_allowance_title')}
           </Text>
           <Pressable onPress={() => router.push('/budgets')}>
             <Text style={[styles.actionLink, { color: theme.accent }]}>
-              Manage Budgets →
+              {t('manage_budgets')}
             </Text>
           </Pressable>
         </View>
@@ -180,10 +186,10 @@ export default function HomeScreen() {
             ]}
           >
             <Text style={[styles.emptyCardTitle, { color: theme.textPrimary }]}>
-              🎯 No Active Budgets Yet
+              {t('no_active_budgets')}
             </Text>
             <Text style={[styles.emptyCardSub, { color: theme.textSecondary }]}>
-              Create a weekly, monthly, or custom trip budget to see your real-time Daily Spending Allowance.
+              {t('no_active_budgets_sub')}
             </Text>
           </Pressable>
         ) : (
@@ -211,7 +217,7 @@ export default function HomeScreen() {
                       <Text
                         style={[styles.budgetPeriodText, { color: theme.textMuted }]}
                       >
-                        {ev.periodStart} → {ev.periodEnd} ({ev.remainingDaysInclusive}d left)
+                        {ev.periodStart} → {ev.periodEnd} ({ev.remainingDaysInclusive} {t('days_left')})
                       </Text>
                     </View>
                   </View>
@@ -237,12 +243,12 @@ export default function HomeScreen() {
                         ev.budget.currencyCode,
                         ev.budget.decimalPlaces
                       )}
-                      /day
+                      {t('per_day')}
                     </Text>
                     <Text
                       style={[styles.allowanceSub, { color: theme.textSecondary }]}
                     >
-                      Daily Allowance
+                      {t('daily_allowance')}
                     </Text>
                   </View>
                 </View>
@@ -275,7 +281,7 @@ export default function HomeScreen() {
 
                 <View style={styles.budgetFooter}>
                   <Text style={{ color: theme.textSecondary, fontSize: 12 }}>
-                    Spent:{' '}
+                    {t('spent_label')}{' '}
                     <Text style={{ color: theme.textPrimary, fontWeight: '700' }}>
                       {formatAmount(
                         ev.spentMinor,
@@ -283,7 +289,7 @@ export default function HomeScreen() {
                         ev.budget.decimalPlaces
                       )}
                     </Text>{' '}
-                    of{' '}
+                    {t('of_label')}{' '}
                     {formatAmount(
                       ev.budget.limitAmountMinor,
                       ev.budget.currencyCode,
@@ -298,7 +304,7 @@ export default function HomeScreen() {
                     }}
                   >
                     {isOver
-                      ? `Over by ${formatAmount(
+                      ? `${t('over_by')} ${formatAmount(
                           ev.overBudgetMinor,
                           ev.budget.currencyCode,
                           ev.budget.decimalPlaces
@@ -307,7 +313,7 @@ export default function HomeScreen() {
                           ev.remainingMinor,
                           ev.budget.currencyCode,
                           ev.budget.decimalPlaces
-                        )} left`}
+                        )} ${t('left_label')}`}
                   </Text>
                 </View>
               </Pressable>
@@ -335,11 +341,11 @@ export default function HomeScreen() {
       <View key="SPENDING_PACE" style={styles.sectionBlock}>
         <View style={styles.sectionHeaderRow}>
           <Text style={[styles.sectionTitle, { color: theme.textPrimary }]}>
-            Spending Pace Comparison
+            {t('spending_pace_title')}
           </Text>
           <Pressable onPress={() => router.push('/insights')}>
             <Text style={[styles.actionLink, { color: theme.accent }]}>
-              Full Charts →
+              {t('full_charts')}
             </Text>
           </Pressable>
         </View>
@@ -353,7 +359,7 @@ export default function HomeScreen() {
           <View style={styles.paceRow}>
             <View>
               <Text style={[styles.paceLabel, { color: theme.textSecondary }]}>
-                This Month (Day {spendingPaceThisMonth.referenceDayIndex})
+                {t('this_month_day')} {spendingPaceThisMonth.referenceDayIndex}
               </Text>
               <Text style={[styles.paceValue, { color: theme.textPrimary }]}>
                 {formatAmount(curLatest, baseCurrency)}
@@ -361,7 +367,7 @@ export default function HomeScreen() {
             </View>
             <View style={{ alignItems: 'flex-end' }}>
               <Text style={[styles.paceLabel, { color: theme.textSecondary }]}>
-                Last Month (Day {spendingPaceThisMonth.referenceDayIndex})
+                {t('last_month_day')} {spendingPaceThisMonth.referenceDayIndex}
               </Text>
               <Text style={[styles.paceValueMuted, { color: theme.textSecondary }]}>
                 {formatAmount(prevAtToday, baseCurrency)}
@@ -386,16 +392,16 @@ export default function HomeScreen() {
               }}
             >
               {BigInt(spendingPaceThisMonth.deltaAtReferenceDayMinor) === 0n
-                ? 'On exact pace with last month'
+                ? t('on_exact_pace')
                 : isFaster
-                  ? `Spending ${formatAmount(
+                  ? `${formatAmount(
                       spendingPaceThisMonth.deltaAtReferenceDayMinor,
                       baseCurrency
-                    )} (+${spendingPaceThisMonth.percentChangeAtReferenceDay}%) faster than last month`
-                  : `Saved ${formatAmount(
+                    )} (+${spendingPaceThisMonth.percentChangeAtReferenceDay}%) ${t('faster_than_last_month')}`
+                  : `${formatAmount(
                       (-BigInt(spendingPaceThisMonth.deltaAtReferenceDayMinor)).toString(),
                       baseCurrency
-                    )} (${spendingPaceThisMonth.percentChangeAtReferenceDay}%) vs. last month`}
+                    )} (${spendingPaceThisMonth.percentChangeAtReferenceDay}%) ${t('saved_vs_last_month')}`}
             </Text>
           </View>
         </Pressable>
@@ -407,11 +413,11 @@ export default function HomeScreen() {
     <View key="UPCOMING_PAYMENTS" style={styles.sectionBlock}>
       <View style={styles.sectionHeaderRow}>
         <Text style={[styles.sectionTitle, { color: theme.textPrimary }]}>
-          Upcoming Bills & Subscriptions ({upcomingPayments.length})
+          {t('upcoming_bills_title')} ({upcomingPayments.length})
         </Text>
         <Pressable onPress={() => router.push('/bills')}>
           <Text style={[styles.actionLink, { color: theme.accent }]}>
-            Manage Bills →
+            {t('manage_bills')}
           </Text>
         </Pressable>
       </View>
@@ -425,10 +431,10 @@ export default function HomeScreen() {
           ]}
         >
           <Text style={[styles.emptyCardTitle, { color: theme.textPrimary }]}>
-            🗓️ Stay Ahead of Bills
+            {t('stay_ahead_bills')}
           </Text>
           <Text style={[styles.emptyCardSub, { color: theme.textSecondary }]}>
-            Add subscriptions & recurring bills with auto-pay or 1-tap Mark as Paid reminders.
+            {t('stay_ahead_bills_sub')}
           </Text>
         </Pressable>
       ) : (
@@ -445,7 +451,8 @@ export default function HomeScreen() {
                 {bill.title}
               </Text>
               <Text style={[styles.billMeta, { color: theme.textSecondary }]}>
-                Due {bill.dueDate} • {bill.autoPay ? '⚡ Auto-Pay' : '🔔 Manual Confirm'}
+                {t('due_label')} {bill.dueDate} •{' '}
+                {bill.autoPay ? t('auto_pay_badge') : t('manual_confirm_badge')}
               </Text>
             </View>
             <Text style={[styles.billAmount, { color: theme.textPrimary }]}>
@@ -459,7 +466,7 @@ export default function HomeScreen() {
                 }}
                 style={[styles.payNowBtn, { backgroundColor: theme.accent }]}
               >
-                <Text style={styles.payNowText}>Mark Paid</Text>
+                <Text style={styles.payNowText}>{t('mark_paid')}</Text>
               </Pressable>
             )}
           </View>
@@ -472,11 +479,11 @@ export default function HomeScreen() {
     <View key="RECENT_TRANSACTIONS" style={styles.sectionBlock}>
       <View style={styles.sectionHeaderRow}>
         <Text style={[styles.sectionTitle, { color: theme.textPrimary }]}>
-          Recent Transactions
+          {t('recent_transactions')}
         </Text>
         <Pressable onPress={() => router.push('/transactions')}>
           <Text style={[styles.actionLink, { color: theme.accent }]}>
-            See All ({transactions.length}) →
+            {t('see_all')} ({transactions.length}) →
           </Text>
         </Pressable>
       </View>
@@ -490,10 +497,10 @@ export default function HomeScreen() {
           ]}
         >
           <Text style={[styles.emptyCardTitle, { color: theme.textPrimary }]}>
-            ⚡ Fast Daily Expense Tracking
+            {t('fast_daily_tracking')}
           </Text>
           <Text style={[styles.emptyCardSub, { color: theme.textSecondary }]}>
-            Tap the floating ＋ button below to log an expense or income in seconds.
+            {t('fast_daily_tracking_sub')}
           </Text>
         </Pressable>
       ) : (
@@ -537,12 +544,16 @@ export default function HomeScreen() {
                   style={[styles.txTitle, { color: theme.textPrimary }]}
                   numberOfLines={1}
                 >
-                  {tx.title}
+                  {localizeName(tx.title)}
                 </Text>
                 <Text style={[styles.txMeta, { color: theme.textSecondary }]}>
-                  {w?.name ?? tx.currencyCode}
-                  {sub ? ` • ${sub.name}` : cat ? ` • ${cat.name}` : ''} •{' '}
-                  {tx.occurredAt.slice(0, 10)}
+                  {w ? localizeName(w.name) : tx.currencyCode}
+                  {sub
+                    ? ` • ${localizeName(sub.name)}`
+                    : cat
+                      ? ` • ${localizeName(cat.name)}`
+                      : ''}{' '}
+                  • {tx.occurredAt.slice(0, 10)}
                 </Text>
               </View>
               <View style={{ alignItems: 'flex-end' }}>
@@ -590,10 +601,33 @@ export default function HomeScreen() {
                 PENNYWISE
               </Text>
               <Text style={[styles.netWorthLabel, { color: theme.textSecondary }]}>
-                Total Net Worth ({baseCurrency})
+                {t('total_net_worth')} ({baseCurrency})
               </Text>
             </View>
             <View style={styles.heroActions}>
+              <Pressable
+                onPress={() => setLanguage(language === 'ar' ? 'en' : 'ar')}
+                hitSlop={{ top: 12, bottom: 12, left: 10, right: 10 }}
+                style={({ pressed }) => [
+                  styles.iconPill,
+                  {
+                    backgroundColor: pressed
+                      ? theme.accent + '33'
+                      : theme.surfaceElevated,
+                    borderColor: theme.border,
+                  },
+                ]}
+              >
+                <Text
+                  style={{
+                    fontSize: 12,
+                    fontWeight: '800',
+                    color: theme.textPrimary,
+                  }}
+                >
+                  {language === 'ar' ? '🌐 EN' : '🌐 العربية'}
+                </Text>
+              </Pressable>
               <Pressable
                 onPress={togglePrivacyMask}
                 hitSlop={{ top: 14, bottom: 14, left: 14, right: 14 }}
@@ -618,7 +652,7 @@ export default function HomeScreen() {
                       : theme.textPrimary,
                   }}
                 >
-                  {preferences.privacyMaskEnabled ? '🙈 Hidden' : '👁️ Visible'}
+                  {preferences.privacyMaskEnabled ? t('hidden') : t('visible')}
                 </Text>
               </Pressable>
             </View>
@@ -637,7 +671,7 @@ export default function HomeScreen() {
               ]}
             >
               <Text style={[styles.quickActionText, { color: theme.danger }]}>
-                － Expense
+                {t('btn_expense')}
               </Text>
             </Pressable>
             <Pressable
@@ -648,7 +682,7 @@ export default function HomeScreen() {
               ]}
             >
               <Text style={[styles.quickActionText, { color: theme.success }]}>
-                ＋ Income
+                {t('btn_income')}
               </Text>
             </Pressable>
             <Pressable
@@ -659,7 +693,7 @@ export default function HomeScreen() {
               ]}
             >
               <Text style={[styles.quickActionText, { color: theme.accent }]}>
-                ⇄ Transfer
+                {t('btn_transfer')}
               </Text>
             </Pressable>
           </View>
@@ -691,13 +725,59 @@ export default function HomeScreen() {
             ]}
           >
             <Text style={[styles.appBrand, { color: theme.accent }]}>
-              WELCOME TO PENNYWISE
+              {t('welcome_brand')}
             </Text>
+            <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
+              <Pressable
+                onPress={() => setLanguage('en')}
+                style={[
+                  styles.iconPill,
+                  {
+                    flex: 1,
+                    alignItems: 'center',
+                    backgroundColor:
+                      language === 'en' ? theme.accent : theme.surfaceElevated,
+                    borderColor: language === 'en' ? theme.accent : theme.border,
+                  },
+                ]}
+              >
+                <Text
+                  style={{
+                    color: language === 'en' ? '#FFFFFF' : theme.textPrimary,
+                    fontWeight: '800',
+                  }}
+                >
+                  English
+                </Text>
+              </Pressable>
+              <Pressable
+                onPress={() => setLanguage('ar')}
+                style={[
+                  styles.iconPill,
+                  {
+                    flex: 1,
+                    alignItems: 'center',
+                    backgroundColor:
+                      language === 'ar' ? theme.accent : theme.surfaceElevated,
+                    borderColor: language === 'ar' ? theme.accent : theme.border,
+                  },
+                ]}
+              >
+                <Text
+                  style={{
+                    color: language === 'ar' ? '#FFFFFF' : theme.textPrimary,
+                    fontWeight: '800',
+                  }}
+                >
+                  العربية
+                </Text>
+              </Pressable>
+            </View>
             <Text style={[styles.onboardingTitle, { color: theme.textPrimary }]}>
-              Choose Your Base Currency
+              {t('choose_base_currency')}
             </Text>
             <Text style={[styles.onboardingSub, { color: theme.textSecondary }]}>
-              Your Net Worth, cross-wallet insights, and global Budgets will convert into your Base Currency. You can change this anytime in settings.
+              {t('onboarding_sub')}
             </Text>
             <ScrollView style={{ maxHeight: 260, marginVertical: 12 }}>
               {SUPPORTED_CURRENCIES.map((curr) => (
@@ -726,7 +806,7 @@ export default function HomeScreen() {
                     {curr.symbol} {curr.code} — {curr.name}
                   </Text>
                   <Text style={{ color: theme.textMuted, fontSize: 12 }}>
-                    {curr.decimalPlaces} decimals
+                    {curr.decimalPlaces} {t('decimals_label')}
                   </Text>
                 </Pressable>
               ))}
@@ -736,7 +816,7 @@ export default function HomeScreen() {
               style={[styles.onboardingBtn, { backgroundColor: theme.accent }]}
             >
               <Text style={{ color: '#FFFFFF', fontWeight: '800', fontSize: 15 }}>
-                Continue with {baseCurrency}
+                {t('continue_with')} {baseCurrency}
               </Text>
             </Pressable>
           </View>

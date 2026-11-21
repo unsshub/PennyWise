@@ -2317,6 +2317,7 @@ export class FinanceEngine {
       privacyMaskEnabled: false,
       biometricLockEnabled: false,
       hasCompletedOnboarding: false,
+      language: 'en',
     };
     if (!row) {
       return defaults;

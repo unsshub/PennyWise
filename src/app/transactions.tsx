@@ -32,6 +32,8 @@ export default function TransactionsScreen() {
     wallets,
     categories,
     theme,
+    t,
+    localizeName,
     formatAmount,
     openQuickEntry,
     refresh,
@@ -186,10 +188,10 @@ export default function TransactionsScreen() {
         <View style={styles.headerRow}>
           <View>
             <Text style={[styles.pageTitle, { color: theme.textPrimary }]}>
-              Transaction History
+              {t('tx_history_title')}
             </Text>
             <Text style={[styles.pageSubtitle, { color: theme.textSecondary }]}>
-              {filteredTransactions.length} matching records
+              {filteredTransactions.length} {t('matching_records')}
             </Text>
           </View>
           <View style={{ flexDirection: 'row', gap: 8 }}>
@@ -216,7 +218,7 @@ export default function TransactionsScreen() {
               ]}
             >
               <Text style={{ color: theme.accent, fontWeight: '700', fontSize: 12 }}>
-                🏷️ Categories
+                {t('categories_btn')}
               </Text>
             </Pressable>
           </View>
@@ -226,7 +228,7 @@ export default function TransactionsScreen() {
         <TextInput
           value={searchQuery}
           onChangeText={setSearchQuery}
-          placeholder="Search merchants, titles, categories, notes..."
+          placeholder={t('search_placeholder')}
           placeholderTextColor={theme.textMuted}
           style={[
             styles.searchInput,
@@ -243,7 +245,7 @@ export default function TransactionsScreen() {
           <TextInput
             value={startDateFilter}
             onChangeText={setStartDateFilter}
-            placeholder="From (YYYY-MM-DD)"
+            placeholder={t('from_date_placeholder')}
             placeholderTextColor={theme.textMuted}
             style={[
               styles.dateFilterInput,
@@ -257,7 +259,7 @@ export default function TransactionsScreen() {
           <TextInput
             value={endDateFilter}
             onChangeText={setEndDateFilter}
-            placeholder="To (YYYY-MM-DD)"
+            placeholder={t('to_date_placeholder')}
             placeholderTextColor={theme.textMuted}
             style={[
               styles.dateFilterInput,
@@ -280,7 +282,7 @@ export default function TransactionsScreen() {
               ]}
             >
               <Text style={{ color: theme.textSecondary, fontSize: 12 }}>
-                Clear
+                {t('clear_btn')}
               </Text>
             </Pressable>
           )}
@@ -294,11 +296,11 @@ export default function TransactionsScreen() {
         >
           {(
             [
-              { label: 'All Types', value: undefined },
-              { label: 'Expenses', value: 'EXPENSE' },
-              { label: 'Income', value: 'INCOME' },
-              { label: 'Transfers', value: 'TRANSFER' },
-              { label: 'Adjustments', value: 'BALANCE_ADJUSTMENT' },
+              { label: t('all_types'), value: undefined },
+              { label: t('expenses_filter'), value: 'EXPENSE' },
+              { label: t('income_filter'), value: 'INCOME' },
+              { label: t('transfers_filter'), value: 'TRANSFER' },
+              { label: t('adjustments_filter'), value: 'BALANCE_ADJUSTMENT' },
             ] as const
           ).map((item) => {
             const active = selectedType === item.value;
@@ -364,7 +366,7 @@ export default function TransactionsScreen() {
                 fontWeight: '700',
               }}
             >
-              All Wallets & Categories
+              {t('all_wallets_cats')}
             </Text>
           </Pressable>
           {wallets.map((w) => {
@@ -388,7 +390,7 @@ export default function TransactionsScreen() {
                     fontWeight: '700',
                   }}
                 >
-                  {w.icon} {w.name}
+                  {w.icon} {localizeName(w.name)}
                 </Text>
               </Pressable>
             );
@@ -418,7 +420,7 @@ export default function TransactionsScreen() {
                     fontWeight: '700',
                   }}
                 >
-                  {cat.icon} {cat.name}
+                  {cat.icon} {localizeName(cat.name)}
                 </Text>
               </Pressable>
             );
@@ -453,7 +455,7 @@ export default function TransactionsScreen() {
                   fontWeight: '700',
                 }}
               >
-                All Subcategories
+                {t('all_subcategories')}
               </Text>
             </Pressable>
             {activeCategorySubcategories.map((sub) => {
@@ -479,7 +481,7 @@ export default function TransactionsScreen() {
                       fontWeight: '700',
                     }}
                   >
-                    {sub.icon} {sub.name}
+                    {sub.icon} {localizeName(sub.name)}
                   </Text>
                 </Pressable>
               );
@@ -496,10 +498,10 @@ export default function TransactionsScreen() {
             ]}
           >
             <Text style={[styles.emptyTitle, { color: theme.textPrimary }]}>
-              No Transactions Found
+              {t('no_tx_found')}
             </Text>
             <Text style={[styles.emptySub, { color: theme.textSecondary }]}>
-              Tap the ＋ button to add an Expense, Income, or Transfer.
+              {t('no_tx_found_sub')}
             </Text>
           </View>
         ) : (
@@ -564,16 +566,16 @@ export default function TransactionsScreen() {
                         style={[styles.txTitle, { color: theme.textPrimary }]}
                         numberOfLines={1}
                       >
-                        {tx.title}
+                        {localizeName(tx.title)}
                       </Text>
                       <Text style={[styles.txMeta, { color: theme.textSecondary }]}>
                         {tx.type === 'TRANSFER'
-                          ? `${srcWallet?.name ?? tx.currencyCode} → ${
-                              dstWallet?.name ?? ''
+                          ? `${srcWallet ? localizeName(srcWallet.name) : tx.currencyCode} → ${
+                              dstWallet ? localizeName(dstWallet.name) : ''
                             }`
-                          : `${srcWallet?.name ?? tx.currencyCode}${
-                              cat ? ` • ${cat.name}` : ''
-                            }${sub ? ` › ${sub.name}` : ''}`}
+                          : `${srcWallet ? localizeName(srcWallet.name) : tx.currencyCode}${
+                              cat ? ` • ${localizeName(cat.name)}` : ''
+                            }${sub ? ` › ${localizeName(sub.name)}` : ''}`}
                       </Text>
                       {tx.note ? (
                         <Text

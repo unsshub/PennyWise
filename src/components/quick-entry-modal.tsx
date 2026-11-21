@@ -30,6 +30,8 @@ export function QuickEntryModal() {
     categories,
     budgets,
     theme,
+    t,
+    localizeName,
     isQuickEntryOpen,
     quickEntryDraft,
     closeQuickEntry,
@@ -332,16 +334,16 @@ export function QuickEntryModal() {
                 { backgroundColor: theme.surfaceElevated },
               ]}
             >
-              {(['EXPENSE', 'INCOME', 'TRANSFER'] as const).map((t) => {
-                const active = txType === t;
+              {(['EXPENSE', 'INCOME', 'TRANSFER'] as const).map((tp) => {
+                const active = txType === tp;
                 return (
                   <Pressable
-                    key={t}
+                    key={tp}
                     onPress={() => {
-                      setTxType(t);
-                      if (t !== 'TRANSFER') {
+                      setTxType(tp);
+                      if (tp !== 'TRANSFER') {
                         const firstCat = categories.find(
-                          (c) => c.parentId === null && c.flowType === t
+                          (c) => c.parentId === null && c.flowType === tp
                         );
                         setCategoryId(firstCat?.id ?? null);
                         setSubcategoryId(null);
@@ -358,11 +360,11 @@ export function QuickEntryModal() {
                         { color: active ? '#FFFFFF' : theme.textSecondary },
                       ]}
                     >
-                      {t === 'EXPENSE'
-                        ? 'Expense'
-                        : t === 'INCOME'
-                          ? 'Income'
-                          : 'Transfer'}
+                      {tp === 'EXPENSE'
+                        ? t('type_expense')
+                        : tp === 'INCOME'
+                          ? t('type_income')
+                          : t('type_transfer')}
                     </Text>
                   </Pressable>
                 );
@@ -403,7 +405,7 @@ export function QuickEntryModal() {
           >
             {/* Source Wallet Selector */}
             <Text style={[styles.sectionLabel, { color: theme.textSecondary }]}>
-              {txType === 'TRANSFER' ? 'From Wallet' : 'Wallet'}
+              {txType === 'TRANSFER' ? t('from_wallet') : t('wallet_label')}
             </Text>
             <ScrollView
               horizontal
@@ -437,7 +439,7 @@ export function QuickEntryModal() {
                         { color: selected ? '#FFFFFF' : theme.textPrimary },
                       ]}
                     >
-                      {w.icon} {w.name} ({w.currencyCode})
+                      {w.icon} {localizeName(w.name)} ({w.currencyCode})
                     </Text>
                   </Pressable>
                 );
@@ -448,7 +450,7 @@ export function QuickEntryModal() {
             {txType === 'TRANSFER' && (
               <>
                 <Text style={[styles.sectionLabel, { color: theme.textSecondary }]}>
-                  To Destination Wallet
+                  {t('to_dest_wallet')}
                 </Text>
                 <ScrollView
                   horizontal
@@ -479,7 +481,7 @@ export function QuickEntryModal() {
                               { color: selected ? '#FFFFFF' : theme.textPrimary },
                             ]}
                           >
-                            {w.icon} {w.name} ({w.currencyCode})
+                            {w.icon} {localizeName(w.name)} ({w.currencyCode})
                           </Text>
                         </Pressable>
                       );
@@ -496,8 +498,8 @@ export function QuickEntryModal() {
                           { color: theme.textSecondary },
                         ]}
                       >
-                        Destination Inflow ({destinationWallet.currencyCode}) —
-                        Auto-converted:{' '}
+                        {t('dest_inflow')} ({destinationWallet.currencyCode}) —{' '}
+                        {t('auto_converted')}{' '}
                         {(
                           Number(prefilledDestinationMinor) /
                           Math.pow(10, destinationWallet.decimalPlaces)
@@ -506,7 +508,7 @@ export function QuickEntryModal() {
                       <TextInput
                         value={customDestinationMajor}
                         onChangeText={setCustomDestinationMajor}
-                        placeholder="Optional exact bank conversion amount"
+                        placeholder={t('optional_bank_amount')}
                         placeholderTextColor={theme.textMuted}
                         keyboardType="decimal-pad"
                         style={[
@@ -527,7 +529,7 @@ export function QuickEntryModal() {
             {txType !== 'TRANSFER' && txType !== 'BALANCE_ADJUSTMENT' && (
               <>
                 <Text style={[styles.sectionLabel, { color: theme.textSecondary }]}>
-                  Category
+                  {t('category_label')}
                 </Text>
                 <ScrollView
                   horizontal
@@ -559,7 +561,7 @@ export function QuickEntryModal() {
                             { color: selected ? '#FFFFFF' : theme.textPrimary },
                           ]}
                         >
-                          {c.icon} {c.name}
+                          {c.icon} {localizeName(c.name)}
                         </Text>
                       </Pressable>
                     );
@@ -571,7 +573,7 @@ export function QuickEntryModal() {
                     <Text
                       style={[styles.sectionLabel, { color: theme.textSecondary }]}
                     >
-                      Subcategory (Optional)
+                      {t('subcategory_optional')}
                     </Text>
                     <ScrollView
                       horizontal
@@ -602,7 +604,7 @@ export function QuickEntryModal() {
                             },
                           ]}
                         >
-                          General
+                          {t('general_sub')}
                         </Text>
                       </Pressable>
                       {availableSubcategories.map((sub) => {
@@ -629,7 +631,7 @@ export function QuickEntryModal() {
                                 },
                               ]}
                             >
-                              {sub.icon} {sub.name}
+                              {sub.icon} {localizeName(sub.name)}
                             </Text>
                           </Pressable>
                         );
@@ -644,7 +646,7 @@ export function QuickEntryModal() {
             {txType === 'EXPENSE' && manualBudgets.length > 0 && (
               <>
                 <Text style={[styles.sectionLabel, { color: theme.textSecondary }]}>
-                  Pin to Trip / Event Budget (Manual Assignment)
+                  {t('pin_manual_budget')}
                 </Text>
                 <ScrollView
                   horizontal
@@ -675,7 +677,7 @@ export function QuickEntryModal() {
                         },
                       ]}
                     >
-                      None
+                      {t('none_label')}
                     </Text>
                   </Pressable>
                   {manualBudgets.map((b) => {
@@ -714,7 +716,7 @@ export function QuickEntryModal() {
               <TextInput
                 value={title}
                 onChangeText={setTitle}
-                placeholder="Title / Merchant (optional)"
+                placeholder={t('title_merchant_placeholder')}
                 placeholderTextColor={theme.textMuted}
                 style={[
                   styles.inputField,
@@ -729,7 +731,7 @@ export function QuickEntryModal() {
               <TextInput
                 value={note}
                 onChangeText={setNote}
-                placeholder="Note"
+                placeholder={t('note_placeholder')}
                 placeholderTextColor={theme.textMuted}
                 style={[
                   styles.inputField,
@@ -747,7 +749,7 @@ export function QuickEntryModal() {
             <View style={styles.inputRow}>
               <View style={{ flex: 1 }}>
                 <Text style={[styles.sectionLabel, { color: theme.textSecondary }]}>
-                  Date (YYYY-MM-DD)
+                  {t('date_label')}
                 </Text>
                 <TextInput
                   value={occurredAtInput}
@@ -767,7 +769,7 @@ export function QuickEntryModal() {
               {selectedWallet && selectedWallet.currencyCode !== baseCurrency && (
                 <View style={{ flex: 1 }}>
                   <Text style={[styles.sectionLabel, { color: theme.textSecondary }]}>
-                    Snapshot Rate (to {baseCurrency})
+                    {t('snapshot_rate_label')} ({baseCurrency})
                   </Text>
                   <TextInput
                     value={snapshotRateInput}
@@ -836,7 +838,7 @@ export function QuickEntryModal() {
                   ]}
                 >
                   <Text style={[styles.deleteText, { color: theme.danger }]}>
-                    Delete
+                    {t('delete_btn')}
                   </Text>
                 </Pressable>
                 <Pressable
@@ -847,7 +849,7 @@ export function QuickEntryModal() {
                   ]}
                 >
                   <Text style={[styles.deleteText, { color: theme.accent }]}>
-                    Duplicate
+                    {t('duplicate_btn')}
                   </Text>
                 </Pressable>
               </>
@@ -865,7 +867,15 @@ export function QuickEntryModal() {
               ]}
             >
               <Text style={styles.saveText}>
-                {editingTx ? 'Update' : `Save ${txType}`}
+                {editingTx
+                  ? t('update_btn')
+                  : `${t('save_btn')} ${
+                      txType === 'EXPENSE'
+                        ? t('type_expense')
+                        : txType === 'INCOME'
+                          ? t('type_income')
+                          : t('type_transfer')
+                    }`}
               </Text>
             </Pressable>
           </View>

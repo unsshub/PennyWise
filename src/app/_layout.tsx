@@ -7,7 +7,7 @@ import { QuickEntryModal } from '@/components/quick-entry-modal';
 import { PennyWiseProvider, usePennyWise } from '@/context/pennywise-context';
 
 function BiometricLockGate({ children }: { children: React.ReactNode }) {
-  const { isAppLocked, unlockApp, theme } = usePennyWise();
+  const { isAppLocked, unlockApp, theme, t } = usePennyWise();
 
   const handleAuthenticate = async () => {
     unlockApp();
@@ -21,23 +21,23 @@ function BiometricLockGate({ children }: { children: React.ReactNode }) {
     <View style={[styles.lockContainer, { backgroundColor: theme.background }]}>
       <Text style={styles.lockIcon}>🔒</Text>
       <Text style={[styles.lockTitle, { color: theme.textPrimary }]}>
-        PennyWise is Locked
+        {t('lock_title')}
       </Text>
       <Text style={[styles.lockSubtitle, { color: theme.textSecondary }]}>
-        Your financial data stays private on your device.
+        {t('lock_subtitle')}
       </Text>
       <Pressable
         onPress={handleAuthenticate}
         style={[styles.unlockButton, { backgroundColor: theme.accent }]}
       >
-        <Text style={styles.unlockButtonText}>Unlock with Biometrics</Text>
+        <Text style={styles.unlockButtonText}>{t('lock_btn')}</Text>
       </Pressable>
     </View>
   );
 }
 
 function AppNavigationShell() {
-  const { theme, openQuickEntry } = usePennyWise();
+  const { theme, openQuickEntry, t } = usePennyWise();
   const insets = useSafeAreaInsets();
   const bottomInset = Math.max(insets.bottom, 16);
   const topInset = Math.max(insets.top, 12);
@@ -71,7 +71,7 @@ function AppNavigationShell() {
           <Tabs.Screen
             name="index"
             options={{
-              title: 'Home',
+              title: t('tab_home'),
               tabBarIcon: ({ color }) => (
                 <Text style={{ fontSize: 18, color }}>🏠</Text>
               ),
@@ -80,7 +80,7 @@ function AppNavigationShell() {
           <Tabs.Screen
             name="transactions"
             options={{
-              title: 'History',
+              title: t('tab_history'),
               tabBarIcon: ({ color }) => (
                 <Text style={{ fontSize: 18, color }}>📋</Text>
               ),
@@ -89,7 +89,7 @@ function AppNavigationShell() {
           <Tabs.Screen
             name="budgets"
             options={{
-              title: 'Budgets',
+              title: t('tab_budgets'),
               tabBarIcon: ({ color }) => (
                 <Text style={{ fontSize: 18, color }}>🎯</Text>
               ),
@@ -98,7 +98,7 @@ function AppNavigationShell() {
           <Tabs.Screen
             name="insights"
             options={{
-              title: 'Insights',
+              title: t('tab_insights'),
               tabBarIcon: ({ color }) => (
                 <Text style={{ fontSize: 18, color }}>📊</Text>
               ),
@@ -107,7 +107,7 @@ function AppNavigationShell() {
           <Tabs.Screen
             name="bills"
             options={{
-              title: 'Bills & More',
+              title: t('tab_bills'),
               tabBarIcon: ({ color }) => (
                 <Text style={{ fontSize: 18, color }}>🗓️</Text>
               ),
